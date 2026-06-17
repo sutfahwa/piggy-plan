@@ -148,8 +148,16 @@ function pwStrength(pw) {
 const PW_LABELS = ['', 'อ่อน', 'พอใช้', 'แข็งแรง'];
 const PW_COLORS = ['var(--line)', 'var(--bad)', 'var(--warn)', 'var(--good)'];
 
+/* ============================================================
+   Feature flag — ฟีเจอร์บัญชี/โปรไฟล์ (ล็อกอิน · จัดการโปรไฟล์ · เปลี่ยนรหัสผ่าน
+   · ตั้งค่าบัญชี · ออกจากระบบ) ถูก "ซ่อน" ไว้ชั่วคราว โค้ดยังอยู่ครบ
+   ตั้งเป็น true เพื่อเปิดใช้งานกลับ — ตอนนี้แอปทำงานโดยเก็บข้อมูลในเครื่อง (localStorage)
+   ============================================================ */
+const ACCOUNT_ENABLED = false;
+
 /* ---------- เมนูโปรไฟล์ (ปุ่มไอคอน + dropdown) ---------- */
 function ProfileMenu({ profile, setProfile, size = 42, onOpenSettings }) {
+  if (!ACCOUNT_ENABLED) return null;   // ซ่อนทางเข้าฟีเจอร์บัญชีทั้งหมด (เว็บ + มือถือ)
   const [open, setOpen] = React.useState(false);
   const [settingsTab, setSettingsTab] = React.useState(null); // null | 'profile' | 'security' | 'account'
   const wrapRef = React.useRef(null);

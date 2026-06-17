@@ -154,4 +154,8 @@ function TopNav({ page, setPage, sub, setSub, month, profile, setProfile, onOpen
 
 Object.assign(window, { TopNav, AppTweaks });
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+// Reuse the root across Vite HMR reloads so dev doesn't warn about
+// calling createRoot() twice on the same container.
+const container = document.getElementById('root');
+window.__pp_root = window.__pp_root || ReactDOM.createRoot(container);
+window.__pp_root.render(<App />);
