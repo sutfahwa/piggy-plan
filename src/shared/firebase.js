@@ -12,6 +12,7 @@ import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup,
   sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile,
   updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser,
+  sendEmailVerification,
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -99,8 +100,12 @@ export const signInEmail = (email, pw) => signInWithEmailAndPassword(auth, email
 export async function signUpEmail(name, email, pw) {
   const cred = await createUserWithEmailAndPassword(auth, email, pw);
   if (name) { try { await updateProfile(cred.user, { displayName: name }); } catch (e) {} }
+  try { await sendEmailVerification(cred.user); } catch (e) {}   // verification link to the user's email
   return cred;
 }
+// Resend the verification link, and re-check whether the user has clicked it yet.
+export const resendVerification = () => sendEmailVerification(auth.currentUser);
+export async function reloadUser() { if (auth && auth.currentUser) await auth.currentUser.reload(); return auth && auth.currentUser; }
 export const signInGoogle = () => signInWithPopup(auth, googleProvider);
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 export async function logout() { clearLocalState(); if (auth) await signOut(auth); }

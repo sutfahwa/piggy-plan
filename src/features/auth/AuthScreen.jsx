@@ -155,7 +155,7 @@ function LegalModal({ which, onClose, onAccept }) {
   );
 }
 
-function BrandPanel() {
+export function BrandPanel() {
   return (
     <div className="auth-brand">
       <div className="auth-brand-top">

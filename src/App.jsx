@@ -12,6 +12,7 @@ import './features/ot/OTPage.jsx';
 import './features/retire/RetirePage.jsx';
 import './features/settings/SettingsPage.jsx';
 import AuthScreen from './features/auth/AuthScreen.jsx';
+import VerifyEmail from './features/auth/VerifyEmail.jsx';
 import { firebaseReady, watchAuth, hydrateFromCloud, saveToCloud, logout as fbLogout } from './shared/firebase.js';
 const {
   useStored, useTweaks, TweaksPanel, TweakSection, TweakRadio, ConfirmHost,
@@ -197,13 +198,14 @@ function Root() {
     return watchAuth(async (user) => {
       setDataReady(false);
       setState({ loading: false, user });
-      if (user) { await hydrateFromCloud(user); setDataReady(true); }
+      // Only load cloud data once the email is verified (Google users are verified).
+      if (user && user.emailVerified) { await hydrateFromCloud(user); setDataReady(true); }
     });
   }, []);
 
   // Debounced push of local changes to the signed-in user's cloud doc.
   React.useEffect(() => {
-    if (!state.user) return;
+    if (!state.user || !state.user.emailVerified) return;
     let t;
     const onChange = () => { clearTimeout(t); t = setTimeout(() => saveToCloud(state.user.uid), 800); };
     window.addEventListener('finplan-change', onChange);
@@ -213,6 +215,7 @@ function Root() {
   if (!firebaseReady) return <ConfigNeeded />;
   if (state.loading) return <Splash />;
   if (!state.user) return <AuthScreen />;
+  if (!state.user.emailVerified) return <VerifyEmail user={state.user} />;  // must click the email link first
   if (!dataReady) return <Splash text="กำลังซิงก์ข้อมูลของคุณ…" />;
   return <App key={state.user.uid} />;   // remount per user so useStored re-reads hydrated data
 }
