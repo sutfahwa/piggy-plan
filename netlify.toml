@@ -7,11 +7,19 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# Pretty URL: serve the auth page at /login (rewrite — URL stays /login).
+# Auth page is hidden — the login screen is not built, and any attempt to reach
+# it (e.g. an old bookmark) is sent back to the app instead of 404.
 [[redirects]]
   from = "/login"
-  to = "/login.html"
-  status = 200
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/login.html"
+  to = "/"
+  status = 301
+  force = true
 
 # Light caching for fingerprinted assets (safe: filenames change on rebuild).
 [[headers]]
