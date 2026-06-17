@@ -20,8 +20,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.6.6",
     "@vitejs/plugin-react": "^4.3.4",
+    "sharp": "^0.35.1",
     "vite": "^5.4.11"
   }
 }
