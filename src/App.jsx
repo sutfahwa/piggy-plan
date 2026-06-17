@@ -11,6 +11,8 @@ import './features/tax/TaxPage.jsx';
 import './features/ot/OTPage.jsx';
 import './features/retire/RetirePage.jsx';
 import './features/settings/SettingsPage.jsx';
+import AuthScreen from './features/auth/AuthScreen.jsx';
+import { firebaseReady, watchAuth, hydrateFromCloud, saveToCloud, logout as fbLogout } from './shared/firebase.js';
 const {
   useStored, useTweaks, TweaksPanel, TweakSection, TweakRadio, ConfirmHost,
   Ic, ICONS, NAV, Sidebar, Topbar, MobileTop, MobileNav, ProfileMenu, BrandMark, PROFILE_DEFAULT,
@@ -71,7 +73,7 @@ function App() {
     const ok = window.showConfirm
       ? await window.showConfirm({ type: 'warning', title: 'ออกจากระบบ', message: 'ต้องการออกจากระบบ Piggy Plan ใช่หรือไม่?', confirmText: 'ออกจากระบบ', cancelText: 'ยกเลิก' })
       : window.confirm('ต้องการออกจากระบบใช่หรือไม่?');
-    if (ok) window.location.href = '/login.html';
+    if (ok) await fbLogout();   // auth gate flips back to the login screen
   };
 
   React.useEffect(() => {
@@ -154,11 +156,72 @@ function TopNav({ page, setPage, sub, setSub, month, profile, setProfile, onOpen
 
 Object.assign(window, { TopNav, AppTweaks });
 
+/* ============================================================
+   Auth gate — login required. Shows the login screen until a user
+   signs in, loads that user's data from Firestore, then renders the
+   app. Data isolation per account is handled in firebase.js.
+   ============================================================ */
+function Splash({ text = 'กำลังโหลด…' }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg, #FFF6F1)', fontFamily: 'var(--font-body)' }}>
+      <div style={{ textAlign: 'center', color: 'var(--ink-soft, #8a7) ' }}>
+        <div style={{ fontSize: 44, marginBottom: 12 }}>🐷</div>
+        <div style={{ color: 'var(--coral-deep, #D64545)', fontWeight: 600 }}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigNeeded() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--bg, #FFF6F1)', fontFamily: 'var(--font-body)' }}>
+      <div style={{ maxWidth: 460, background: '#fff', borderRadius: 18, padding: '28px 26px', boxShadow: '0 10px 40px rgba(0,0,0,.1)' }}>
+        <div style={{ fontSize: 40 }}>🐷🔑</div>
+        <h2 style={{ fontFamily: 'var(--font-head)', color: 'var(--coral-deep, #D64545)', margin: '10px 0 8px' }}>ยังไม่ได้ตั้งค่า Firebase</h2>
+        <p style={{ color: 'var(--ink-soft, #6b6b6b)', lineHeight: 1.7, fontSize: 14.5 }}>
+          แอปต้องการบัญชี/ฐานข้อมูล Firebase เพื่อล็อกอินและเก็บข้อมูลต่อผู้ใช้
+          สร้างโปรเจกต์ฟรี แล้วใส่ค่าในไฟล์ <code>.env</code> (ดู <code>.env.example</code> และ README หัวข้อ Firebase)
+          จากนั้น build ใหม่อีกครั้ง
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Root() {
+  const [state, setState] = React.useState({ loading: true, user: null });
+  const [dataReady, setDataReady] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!firebaseReady) return;
+    return watchAuth(async (user) => {
+      setDataReady(false);
+      setState({ loading: false, user });
+      if (user) { await hydrateFromCloud(user); setDataReady(true); }
+    });
+  }, []);
+
+  // Debounced push of local changes to the signed-in user's cloud doc.
+  React.useEffect(() => {
+    if (!state.user) return;
+    let t;
+    const onChange = () => { clearTimeout(t); t = setTimeout(() => saveToCloud(state.user.uid), 800); };
+    window.addEventListener('finplan-change', onChange);
+    return () => { window.removeEventListener('finplan-change', onChange); clearTimeout(t); };
+  }, [state.user]);
+
+  if (!firebaseReady) return <ConfigNeeded />;
+  if (state.loading) return <Splash />;
+  if (!state.user) return <AuthScreen />;
+  if (!dataReady) return <Splash text="กำลังซิงก์ข้อมูลของคุณ…" />;
+  return <App key={state.user.uid} />;   // remount per user so useStored re-reads hydrated data
+}
+
 // Reuse the root across Vite HMR reloads so dev doesn't warn about
 // calling createRoot() twice on the same container.
 const container = document.getElementById('root');
 window.__pp_root = window.__pp_root || ReactDOM.createRoot(container);
-window.__pp_root.render(<App />);
+window.__pp_root.render(<Root />);
 
 // PWA: register the service worker on the web only. Inside the Capacitor
 // Android app the assets are already bundled, so we skip the SW there.

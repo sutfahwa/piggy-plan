@@ -1,0 +1,137 @@
+/* ============================================================
+   firebase.js — Auth (email + Google) + per-user Firestore sync.
+
+   The whole app state lives in localStorage under the "finplan:" prefix.
+   On login we hydrate it from the user's Firestore doc; on change we push a
+   snapshot back. Local data is cleared on every auth change so two accounts
+   on the same device never see each other's data.
+   ============================================================ */
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup,
+  sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile,
+  updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser,
+} from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+
+const cfg = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+
+// True once a real config is present (lets the app show a friendly setup notice
+// instead of crashing when .env is empty).
+export const firebaseReady = !!cfg.apiKey && !!cfg.projectId;
+
+let auth = null, db = null;
+export const googleProvider = new GoogleAuthProvider();
+
+if (firebaseReady) {
+  const app = initializeApp(cfg);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
+}
+export { auth, db };
+
+/* ---------- local <-> cloud state ---------- */
+const PREFIX = 'finplan:';
+
+export function clearLocalState() {
+  Object.keys(localStorage).filter(k => k.startsWith(PREFIX)).forEach(k => localStorage.removeItem(k));
+}
+function snapshotLocal() {
+  const out = {};
+  Object.keys(localStorage).filter(k => k.startsWith(PREFIX)).forEach(k => { out[k] = localStorage.getItem(k); });
+  return out;
+}
+function applyIdentity(user) {
+  // Keep finplan:profile in step with the signed-in account.
+  const key = PREFIX + 'profile';
+  let prof = {};
+  try { prof = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+  prof.email = user.email || prof.email || '';
+  if (!prof.name) prof.name = user.displayName || prof.name || (user.email ? user.email.split('@')[0] : 'ผู้ใช้งาน');
+  prof.provider = (user.providerData[0]?.providerId || '').includes('google') ? 'google' : 'email';
+  localStorage.setItem(key, JSON.stringify(prof));
+}
+
+// Pull this user's saved state into localStorage (clearing whatever was there).
+export async function hydrateFromCloud(user) {
+  clearLocalState();
+  if (db) {
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      if (snap.exists() && snap.data().stateJson) {
+        const map = JSON.parse(snap.data().stateJson);
+        Object.entries(map).forEach(([k, v]) => { if (k.startsWith(PREFIX)) localStorage.setItem(k, v); });
+      }
+    } catch (e) { /* offline / first run — start empty */ }
+  }
+  applyIdentity(user);
+}
+
+// Push the current localStorage snapshot to the user's Firestore doc.
+export async function saveToCloud(uid) {
+  if (!db) return;
+  try {
+    await setDoc(doc(db, 'users', uid), { stateJson: JSON.stringify(snapshotLocal()), updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) { /* will retry on next change */ }
+}
+
+// Wipe both local and the user's cloud doc (the in-app "clear all data" action).
+export async function resetCloudState() {
+  clearLocalState();
+  const user = auth && auth.currentUser;
+  if (db && user) {
+    try { await setDoc(doc(db, 'users', user.uid), { stateJson: JSON.stringify({}), updatedAt: serverTimestamp() }, { merge: true }); } catch (e) {}
+  }
+}
+
+/* ---------- auth ---------- */
+export const watchAuth = (cb) => (auth ? onAuthStateChanged(auth, cb) : (cb(null), () => {}));
+export const signInEmail = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
+export async function signUpEmail(name, email, pw) {
+  const cred = await createUserWithEmailAndPassword(auth, email, pw);
+  if (name) { try { await updateProfile(cred.user, { displayName: name }); } catch (e) {} }
+  return cred;
+}
+export const signInGoogle = () => signInWithPopup(auth, googleProvider);
+export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+export async function logout() { clearLocalState(); if (auth) await signOut(auth); }
+
+export async function changePassword(currentPw, newPw) {
+  const user = auth.currentUser;
+  const cred = EmailAuthProvider.credential(user.email, currentPw);
+  await reauthenticateWithCredential(user, cred);
+  await updatePassword(user, newPw);
+}
+export async function deleteAccount() {
+  const user = auth.currentUser;
+  if (db) { try { await deleteDoc(doc(db, 'users', user.uid)); } catch (e) {} }
+  clearLocalState();
+  await deleteUser(user);
+}
+
+// Firebase error code → friendly Thai message.
+export function authMessage(err) {
+  const c = (err && err.code) || '';
+  const map = {
+    'auth/invalid-email': 'รูปแบบอีเมลไม่ถูกต้อง',
+    'auth/user-not-found': 'ไม่พบบัญชีนี้',
+    'auth/wrong-password': 'รหัสผ่านไม่ถูกต้อง',
+    'auth/invalid-credential': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+    'auth/email-already-in-use': 'อีเมลนี้ถูกใช้สมัครแล้ว',
+    'auth/weak-password': 'รหัสผ่านอ่อนเกินไป (อย่างน้อย 6 ตัวอักษร)',
+    'auth/too-many-requests': 'พยายามหลายครั้งเกินไป ลองใหม่ภายหลัง',
+    'auth/popup-closed-by-user': 'ปิดหน้าต่าง Google ก่อนเข้าสู่ระบบ',
+    'auth/network-request-failed': 'เชื่อมต่อเครือข่ายไม่สำเร็จ',
+    'auth/requires-recent-login': 'โปรดเข้าสู่ระบบใหม่อีกครั้งก่อนทำรายการนี้',
+  };
+  return map[c] || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+}

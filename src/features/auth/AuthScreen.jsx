@@ -1,11 +1,12 @@
 /* ============================================================
-   login.jsx — auth feature (login · signup · forgot password)
-   Standalone entry rendered by login.html.
+   AuthScreen.jsx — login / signup / forgot-password gate.
+   Real Firebase auth (email + Google). On success the app's auth
+   gate (App.jsx) flips automatically via onAuthStateChanged, so
+   there is no manual redirect here.
    ============================================================ */
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import '../../styles.css';
 import './auth.css';
+import { signInEmail, signUpEmail, signInGoogle, resetPassword, authMessage } from '../../shared/firebase.js';
 
 const { useState } = React;
 
@@ -27,14 +28,12 @@ function Eye({ off }) {
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-8 10-8 10 8 10 8-3 8-10 8-10-8-10-8Z"/><circle cx="12" cy="12" r="3"/></svg>
   );
 }
-function CheckIc() {
-  return <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>;
-}
 function BrandMark() {
   return (
     <div className="brand-mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 18V9M9 18V5M14 18v-6M19 18v-9" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 11.5c0-2.8 2.6-5 6-5h3.5c.8-1 2-1.6 3.2-1.6 0 .8-.3 1.5-.7 2 .9.6 1.6 1.5 1.9 2.6l1.6.5c.4.1.6.5.6.9V14c0 .5-.4.9-.9.9h-1.2c-.4.6-.9 1.1-1.5 1.5V18a1 1 0 0 1-1 1h-1.2a1 1 0 0 1-1-1v-.6a7.7 7.7 0 0 1-2.7 0V18a1 1 0 0 1-1 1H7.9a1 1 0 0 1-1-1v-1.7C5 15.2 3.8 13.5 3.6 11.5Z"/>
+        <circle cx="15" cy="11" r="0.9" fill="#fff" stroke="none" />
       </svg>
     </div>
   );
@@ -76,7 +75,6 @@ function Piggy() {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function pwStrength(pw) {
   if (!pw) return 0;
   let s = 0;
@@ -113,10 +111,10 @@ const LEGAL = {
     intro: 'เราให้ความสำคัญกับความเป็นส่วนตัวของคุณ นโยบายนี้อธิบายว่าเราเก็บและใช้ข้อมูลของคุณอย่างไร',
     secs: [
       { h: '1. ข้อมูลที่เราเก็บ', p: 'ชื่อที่ใช้แสดง อีเมล และข้อมูลการเงินที่คุณกรอกเอง เช่น งบรายเดือน ภาษี และเงินออม' },
-      { h: '2. การใช้ข้อมูล', p: 'เราใช้ข้อมูลเพื่อแสดงผล คำนวณ และช่วยคุณวางแผนการเงินภายในแอปเท่านั้น' },
-      { h: '3. การจัดเก็บและความปลอดภัย', p: 'ข้อมูลการเงินของคุณถูกจัดเก็บไว้ในอุปกรณ์ของคุณเอง (local storage) เราไม่ส่งออกไปยังเซิร์ฟเวอร์ภายนอกโดยไม่ได้รับอนุญาต' },
+      { h: '2. การใช้ข้อมูล', p: 'เราใช้ข้อมูลเพื่อแสดงผล คำนวณ และช่วยคุณวางแผนการเงิน และซิงก์ข้อมูลข้ามอุปกรณ์ผ่านบัญชีของคุณ' },
+      { h: '3. การจัดเก็บและความปลอดภัย', p: 'ข้อมูลถูกจัดเก็บในบัญชีของคุณบน Firebase และเข้าถึงได้เฉพาะเจ้าของบัญชีตามกฎความปลอดภัย' },
       { h: '4. การเปิดเผยต่อบุคคลที่สาม', p: 'เราจะไม่ขายหรือให้เช่าข้อมูลส่วนบุคคลของคุณแก่บุคคลที่สามเพื่อการตลาด' },
-      { h: '5. สิทธิของคุณ', p: 'คุณสามารถดู แก้ไข หรือลบข้อมูลของคุณได้ตลอดเวลาผ่านหน้าตั้งค่าของแอป' },
+      { h: '5. สิทธิของคุณ', p: 'คุณสามารถดู แก้ไข หรือลบข้อมูลและบัญชีของคุณได้ตลอดเวลาผ่านหน้าตั้งค่าของแอป' },
       { h: '6. ติดต่อเรา', p: 'หากมีคำถามเกี่ยวกับความเป็นส่วนตัว ติดต่อได้ที่ privacy@piggyplan.app (ตัวอย่าง)' },
     ],
   },
@@ -145,10 +143,7 @@ function LegalModal({ which, onClose, onAccept }) {
           <p className="legal-updated">{d.updated}</p>
           <p className="legal-intro">{d.intro}</p>
           {d.secs.map((s, i) => (
-            <div className="legal-sec" key={i}>
-              <h4>{s.h}</h4>
-              <p>{s.p}</p>
-            </div>
+            <div className="legal-sec" key={i}><h4>{s.h}</h4><p>{s.p}</p></div>
           ))}
         </div>
         <div className="legal-foot">
@@ -170,7 +165,6 @@ function BrandPanel() {
           <div className="auth-brand-sub">วางแผนการเงินส่วนตัว</div>
         </div>
       </div>
-
       <div className="auth-brand-mid">
         <Piggy />
         <h1 className="auth-hero-title">วางแผนการเงิน<br/>ให้เป็นเรื่องสนุก</h1>
@@ -181,9 +175,7 @@ function BrandPanel() {
           <div className="auth-feat"><span className="auth-feat-ic">🐖</span><span>ติดตามเงินออมสะสมรายปี</span></div>
         </div>
       </div>
-
       <div className="auth-brand-foot">🔒 ข้อมูลของคุณถูกเก็บเป็นความลับและปลอดภัย</div>
-
       <div className="auth-brand-compact">
         <h1 className="auth-hero-title">วางแผนการเงินให้เป็นเรื่องสนุก 🐷</h1>
         <p className="auth-hero-sub">จัดการเงิน ภาษี และเงินออม ครบในที่เดียว</p>
@@ -192,29 +184,23 @@ function BrandPanel() {
   );
 }
 
-function AuthApp() {
-  const [view, setView] = useState(() => (location.hash === '#signup' ? 'signup' : location.hash === '#forgot' ? 'forgot' : 'login'));
+export default function AuthScreen() {
+  const [view, setView] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [showPw, setShowPw] = useState(false);
   const [showPw2, setShowPw2] = useState(false);
   const [vals, setVals] = useState({ name: '', email: '', pw: '', pw2: '' });
   const [errs, setErrs] = useState({});
-  const [remember, setRemember] = useState(true);
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(null); // null | 'login' | 'signup' | 'google'
-  const [sentTo, setSentTo] = useState(null); // อีเมลที่ส่งลิงก์รีเซ็ตไปแล้ว
-  const [legal, setLegal] = useState(null); // null | 'terms' | 'privacy'
+  const [sentTo, setSentTo] = useState(null);
+  const [legal, setLegal] = useState(null);
 
   const isSignup = view === 'signup';
   const isForgot = view === 'forgot';
   const set = (k, v) => { setVals(p => ({ ...p, [k]: v })); if (errs[k]) setErrs(p => ({ ...p, [k]: null })); };
+  const swap = (v) => { setView(v); setErrs({}); setSentTo(null); };
 
-  const swap = (v) => {
-    setView(v); setErrs({}); setSentTo(null);
-    history.replaceState(null, '', v === 'signup' ? '#signup' : v === 'forgot' ? '#forgot' : '#login');
-  };
-
-  const sendReset = (ev) => {
+  const sendReset = async (ev) => {
     ev.preventDefault();
     const e = {};
     if (!vals.email.trim()) e.email = 'กรุณากรอกอีเมล';
@@ -222,7 +208,9 @@ function AuthApp() {
     setErrs(e);
     if (Object.keys(e).length) return;
     setBusy(true);
-    setTimeout(() => { setBusy(false); setSentTo(vals.email.trim()); }, 950);
+    try { await resetPassword(vals.email.trim()); setSentTo(vals.email.trim()); }
+    catch (err) { setErrs({ form: authMessage(err) }); }
+    finally { setBusy(false); }
   };
 
   const validate = () => {
@@ -237,65 +225,28 @@ function AuthApp() {
     return e;
   };
 
-  const persistAuth = (provider, extra = {}) => {
-    let base = { name: 'สมหญิง ใจดี', email: 'somying@email.com', color: 'mint', pic: '', provider: 'email' };
-    try {
-      const s = localStorage.getItem('finplan:profile');
-      if (s) base = { ...base, ...JSON.parse(s) };
-    } catch (e) {}
-    const next = { ...base, provider, ...extra };
-    try { localStorage.setItem('finplan:profile', JSON.stringify(next)); } catch (e) {}
-  };
-
-  const submit = (ev) => {
+  // On success Firebase fires onAuthStateChanged → App.jsx swaps to the app.
+  const submit = async (ev) => {
     ev.preventDefault();
     const e = validate();
     setErrs(e);
     if (Object.keys(e).length) return;
     setBusy(true);
-    setTimeout(() => {
-      setBusy(false);
-      const extra = { email: vals.email.trim(), provider: 'email' };
-      if (isSignup && vals.name.trim()) extra.name = vals.name.trim();
-      persistAuth('email', extra);
-      setDone(isSignup ? 'signup' : 'login');
-    }, 950);
+    try {
+      if (isSignup) await signUpEmail(vals.name.trim(), vals.email.trim(), vals.pw);
+      else await signInEmail(vals.email.trim(), vals.pw);
+    } catch (err) { setErrs({ form: authMessage(err) }); setBusy(false); }
   };
 
-  const google = () => {
+  const google = async () => {
     setBusy(true);
-    setTimeout(() => {
-      setBusy(false);
-      const gmail = (vals.email.trim() && /@gmail\.com$/i.test(vals.email.trim())) ? vals.email.trim() : 'somying@gmail.com';
-      const extra = { email: gmail, provider: 'google' };
-      if (isSignup && vals.name.trim()) extra.name = vals.name.trim();
-      persistAuth('google', extra);
-      setDone('google');
-    }, 900);
+    try { await signInGoogle(); }
+    catch (err) { setErrs({ form: authMessage(err) }); setBusy(false); }
   };
-
-  if (done) {
-    const msg = done === 'signup'
-      ? { t: 'สร้างบัญชีสำเร็จ! 🎉', d: 'ยินดีต้อนรับสู่ Piggy Plan เริ่มวางแผนการเงินของคุณได้เลย' }
-      : { t: 'เข้าสู่ระบบสำเร็จ', d: 'กำลังพาคุณเข้าสู่ Piggy Plan…' };
-    return (
-      <div className="auth">
-        <BrandPanel />
-        <div className="auth-form-side">
-          <div className="auth-card auth-success">
-            <div className="auth-success-ic"><CheckIc /></div>
-            <h1 className="auth-title">{msg.t}</h1>
-            <p className="auth-desc" style={{ marginBottom: 26 }}>{msg.d}</p>
-            <a className="auth-submit" href="/index.html">เข้าสู่ Piggy Plan</a>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const st = pwStrength(vals.pw);
 
-  /* ---------- ลืมรหัสผ่าน ---------- */
+  /* ---------- forgot password ---------- */
   if (isForgot) {
     return (
       <div className="auth">
@@ -311,9 +262,6 @@ function AuthApp() {
                 <p className="auth-desc" style={{ marginBottom: 8 }}>เราได้ส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปที่</p>
                 <p className="auth-desc" style={{ marginBottom: 26, fontWeight: 600, color: 'var(--ink)' }}>{sentTo}</p>
                 <button className="auth-submit" type="button" onClick={() => swap('login')} style={{ background: 'linear-gradient(120deg, var(--coral-deep), #FF8E84)' }}>กลับไปหน้าเข้าสู่ระบบ</button>
-                <div className="auth-foot">
-                  ไม่ได้รับอีเมล? <button className="auth-link" onClick={() => setSentTo(null)}>ส่งอีกครั้ง</button>
-                </div>
               </div>
             ) : (
               <div className="auth-view" key="forgot">
@@ -322,7 +270,6 @@ function AuthApp() {
                   <h1 className="auth-title">ลืมรหัสผ่าน?</h1>
                   <p className="auth-desc">กรอกอีเมลที่ใช้สมัคร แล้วเราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้</p>
                 </div>
-
                 <form onSubmit={sendReset} noValidate>
                   <div className="auth-fields">
                     <div className="field">
@@ -332,15 +279,12 @@ function AuthApp() {
                       {errs.email && <div className="auth-err">{errs.email}</div>}
                     </div>
                   </div>
-
+                  {errs.form && <div className="auth-err" style={{ marginTop: 10 }}>{errs.form}</div>}
                   <button className="auth-submit" type="submit" disabled={busy}>
                     {busy ? <span className="auth-spinner" /> : 'ส่งลิงก์ตั้งรหัสผ่านใหม่'}
                   </button>
                 </form>
-
-                <div className="auth-foot">
-                  จำรหัสผ่านได้แล้ว? <button className="auth-link" onClick={() => swap('login')}>เข้าสู่ระบบ</button>
-                </div>
+                <div className="auth-foot">จำรหัสผ่านได้แล้ว? <button className="auth-link" onClick={() => swap('login')}>เข้าสู่ระบบ</button></div>
               </div>
             )}
           </div>
@@ -364,7 +308,6 @@ function AuthApp() {
             <button className="gbtn" type="button" onClick={google} disabled={busy}>
               <GoogleG /> {isSignup ? 'สมัครด้วย Google' : 'เข้าสู่ระบบด้วย Google'}
             </button>
-
             <div className="auth-divider">หรือใช้อีเมล</div>
 
             <form onSubmit={submit} noValidate>
@@ -377,14 +320,12 @@ function AuthApp() {
                     {errs.name && <div className="auth-err">{errs.name}</div>}
                   </div>
                 )}
-
                 <div className="field">
                   <label htmlFor="f-email">อีเมล</label>
                   <input id="f-email" className={'input' + (errs.email ? ' err' : '')} type="email" placeholder="you@email.com"
                     value={vals.email} onChange={e => set('email', e.target.value)} autoComplete="email" />
                   {errs.email && <div className="auth-err">{errs.email}</div>}
                 </div>
-
                 <div className="field">
                   <label htmlFor="f-pw">รหัสผ่าน</label>
                   <div className="auth-pw-wrap">
@@ -403,7 +344,6 @@ function AuthApp() {
                     </div>
                   )}
                 </div>
-
                 {isSignup && (
                   <div className="field">
                     <label htmlFor="f-pw2">ยืนยันรหัสผ่าน</label>
@@ -419,7 +359,7 @@ function AuthApp() {
 
               {!isSignup ? (
                 <div className="auth-options">
-                  <label className="auth-check"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />จดจำฉันไว้</label>
+                  <span />
                   <button type="button" className="auth-link" onClick={() => swap('forgot')}>ลืมรหัสผ่าน?</button>
                 </div>
               ) : (
@@ -430,6 +370,7 @@ function AuthApp() {
                 </div>
               )}
               {errs.agree && <div className="auth-err" style={{ marginTop: 6 }}>{errs.agree}</div>}
+              {errs.form && <div className="auth-err" style={{ marginTop: 10 }}>{errs.form}</div>}
 
               <button className="auth-submit" type="submit" disabled={busy}>
                 {busy ? <span className="auth-spinner" /> : (isSignup ? 'สร้างบัญชี' : 'เข้าสู่ระบบ')}
@@ -437,11 +378,9 @@ function AuthApp() {
             </form>
 
             <div className="auth-foot">
-              {isSignup ? (
-                <span>มีบัญชีอยู่แล้ว? <button className="auth-link" onClick={() => swap('login')}>เข้าสู่ระบบ</button></span>
-              ) : (
-                <span>ยังไม่มีบัญชี? <button className="auth-link" onClick={() => swap('signup')}>สมัครใช้งานฟรี</button></span>
-              )}
+              {isSignup
+                ? <span>มีบัญชีอยู่แล้ว? <button className="auth-link" onClick={() => swap('login')}>เข้าสู่ระบบ</button></span>
+                : <span>ยังไม่มีบัญชี? <button className="auth-link" onClick={() => swap('signup')}>สมัครใช้งานฟรี</button></span>}
             </div>
           </div>
         </div>
@@ -450,5 +389,3 @@ function AuthApp() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(<AuthApp />);

@@ -3,12 +3,10 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 
-// Single page: the main app (index.html). The auth/login page (login.html +
-// src/features/auth) is intentionally NOT built — the account feature is hidden,
-// so the login screen must not be reachable, even at /login. The source is kept;
-// to re-enable, add `login: resolve(__dirname, 'login.html')` back below.
-// Each feature lives under src/features/<feature> so it can be developed and
-// shipped on its own branch with minimal cross-file churn.
+// Single page (index.html). Auth is an in-app gate (src/features/auth/AuthScreen.jsx
+// rendered by App.jsx) — login is required before the app loads, and per-user data
+// lives in Firebase (see src/shared/firebase.js). Each feature lives under
+// src/features/<feature> so it can be developed/shipped on its own branch.
 //
 // VitePWA makes the deployed site installable on mobile (Add to Home Screen)
 // and work offline. SW registration is done manually in App.jsx, guarded so it

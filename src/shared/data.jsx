@@ -22,7 +22,10 @@ function useStored(key, initial) {
     catch (e) { return initial; }
   });
   React.useEffect(() => {
-    try { localStorage.setItem(K, JSON.stringify(v)); } catch (e) {}
+    try {
+      localStorage.setItem(K, JSON.stringify(v));
+      window.dispatchEvent(new Event('finplan-change'));  // trigger per-user cloud sync
+    } catch (e) {}
   }, [v]);
   return [v, setV];
 }

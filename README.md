@@ -2,12 +2,11 @@
 
 A friendly Thai personal-finance app: monthly budgeting, income-tax planning
 (สิทธิลดหย่อน ปีภาษี 2569), overtime (OT) calculation, and provident-fund (PVD)
-retirement projection. All data is stored **on-device** (`localStorage`) — no
-sign-in required.
+retirement projection.
 
-> The account/profile feature (login, profile, change password, account
-> settings) is currently **hidden** behind a flag — the code is kept, not
-> deleted. See [Account feature (hidden)](#account-feature-hidden).
+**Login is required** (Firebase Auth — email/password + Google). Each user's data
+is stored per-account in Firestore and synced across devices; `localStorage` is
+used as a per-user cache. See [Accounts & per-user data](#accounts--per-user-data-firebase).
 
 Implemented from a [Claude Design](https://claude.ai/design) handoff bundle as a
 real **Vite + React** app. Each feature lives in its own folder so it can be
@@ -17,22 +16,28 @@ developed and shipped on a separate git branch with minimal cross-file churn.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173  (main app: /, auth: /login.html)
-npm run build    # production build → dist/
-npm run preview  # serve the production build
+cp .env.example .env   # then fill in your Firebase web config (see below)
+npm run dev            # http://localhost:5173
+npm run build          # production build → dist/
+npm run preview        # serve the production build
 ```
+
+> Without a `.env`, the app shows a "configure Firebase" notice instead of the
+> login screen.
 
 ## Project structure
 
 ```
 PiggyPlan/
-├── index.html              # main app entry  →  src/App.jsx
-├── login.html              # auth entry      →  src/features/auth/login.jsx
-├── vite.config.js          # 2-page build (main + login)
+├── index.html              # app entry  →  src/App.jsx
+├── vite.config.js          # single-page build + PWA
+├── .env.example            # Firebase web config template (copy to .env)
+├── firestore.rules         # Firestore security rules (per-user isolation)
 └── src/
-    ├── App.jsx             # app shell: routing between pages, theme tweaks
+    ├── App.jsx             # auth gate (login required) + app shell + cloud sync
     ├── styles.css          # the whole design system (colors, components, layout)
     ├── shared/             # cross-feature foundation
+    │   ├── firebase.js     # Auth (email + Google) + per-user Firestore load/save
     │   ├── globals.js      # load-order barrel (run before any feature page)
     │   ├── data.jsx        # formats, mock data, tax/PVD/retirement formulas, icons
     │   ├── inputs.jsx      # MoneyInput, CustomSelect (used by several features)
@@ -46,9 +51,9 @@ PiggyPlan/
         ├── tax/            # วางแผนภาษี — income tax + deductions calculator
         ├── ot/             # คำนวณค่าล่วงเวลา — OT worksheet
         ├── retire/         # กองทุนสำรองเลี้ยงชีพ — PVD projection
-        ├── settings/       # full-page account settings        (hidden — see flag)
-        ├── profile/        # profile menu + settings modal + tabs (hidden — holds the flag)
-        └── auth/           # login / signup / forgot-password   (hidden — orphaned page)
+        ├── settings/       # full-page account settings
+        ├── profile/        # profile menu + settings modal + tabs
+        └── auth/           # AuthScreen (login/signup/forgot) + auth.css
 ```
 
 ### Per-feature → per-branch workflow
@@ -72,25 +77,37 @@ side-effect-imports `globals.js` (so `window` is fully populated) and then reads
 what it needs via a destructure from `window`. `App.jsx` additionally imports
 each feature page so their components register before the app mounts.
 
-State persists to `localStorage` under the `finplan:` prefix.
+Each feature reads/writes app state via `useStored` (localStorage under the
+`finplan:` prefix); that state is the unit synced to the cloud per user.
 
-## Account feature (hidden)
+## Accounts & per-user data (Firebase)
 
-Login, profile management, change-password, account settings, and logout are
-currently **turned off** so the app runs purely on-device with no sign-in. The
-code is intact — nothing was deleted.
+Login is required. On sign-in, the user's saved state is loaded from Firestore
+into `localStorage`; on any change it's pushed back (debounced). Local data is
+cleared on every auth change, so two accounts on the same device never see each
+other's data. The whole `finplan:*` state is stored as one document per user:
+`users/{uid}`. (`ACCOUNT_ENABLED` in `src/features/profile/profile.jsx` is now
+`true`; set it to `false` to hide accounts again.)
 
-`ProfileMenu` (the avatar at the top-right) is the only entry point to all of
-these, so a single flag gates everything across web **and** mobile:
+### One-time Firebase setup
 
-```js
-// src/features/profile/profile.jsx
-const ACCOUNT_ENABLED = false;   // ← set to true to restore the account feature
-```
+1. **Create a project** at [console.firebase.google.com](https://console.firebase.google.com).
+2. **Add a Web app** (`</>`), copy the config values into your `.env`
+   (see `.env.example`).
+3. **Authentication → Sign-in method:** enable **Email/Password** and **Google**.
+4. **Firestore Database → Create database** (Production mode).
+5. **Firestore → Rules:** paste [`firestore.rules`](firestore.rules) and Publish
+   (each user can read/write only their own `users/{uid}` doc).
+6. **Authentication → Settings → Authorized domains:** add your Netlify domain
+   (and `localhost` is allowed by default) so Google sign-in works in production.
+7. `npm run build` (env is read at build time) and deploy.
 
-When `false`, `ProfileMenu` renders nothing, so the avatar, profile dropdown,
-settings page, and logout/login redirect never appear. `login.html` still builds
-but nothing links to it. Flip the flag to `true` to bring the whole feature back.
+The Firebase web keys are public client config — access is controlled by the
+security rules + Auth, not by hiding the keys. `.env` is gitignored anyway.
+
+> **Android note:** Google sign-in via popup may not work inside the Capacitor
+> WebView; email/password works there. For native Google sign-in later, add the
+> `@capacitor-firebase/authentication` plugin.
 
 ## Install on mobile (PWA)
 

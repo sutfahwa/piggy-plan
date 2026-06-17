@@ -1,6 +1,7 @@
 import React from 'react';
 import '../../shared/data.jsx';
 const { Ic, ICONS } = window;
+import { logout as fbLogout, changePassword as fbChangePassword, deleteAccount as fbDeleteAccount, resetCloudState, authMessage } from '../../shared/firebase.js';
 /* ============================================================
    profile.jsx — ไอคอนโปรไฟล์มุมขวาบน + เมนู + ตั้งค่าบัญชี
    (จัดการโปรไฟล์ · เปลี่ยนรหัสผ่าน · ลบบัญชี · ออกจากระบบ)
@@ -153,7 +154,7 @@ const PW_COLORS = ['var(--line)', 'var(--bad)', 'var(--warn)', 'var(--good)'];
    · ตั้งค่าบัญชี · ออกจากระบบ) ถูก "ซ่อน" ไว้ชั่วคราว โค้ดยังอยู่ครบ
    ตั้งเป็น true เพื่อเปิดใช้งานกลับ — ตอนนี้แอปทำงานโดยเก็บข้อมูลในเครื่อง (localStorage)
    ============================================================ */
-const ACCOUNT_ENABLED = false;
+const ACCOUNT_ENABLED = true;
 
 /* ---------- เมนูโปรไฟล์ (ปุ่มไอคอน + dropdown) ---------- */
 function ProfileMenu({ profile, setProfile, size = 42, onOpenSettings }) {
@@ -181,7 +182,7 @@ function ProfileMenu({ profile, setProfile, size = 42, onOpenSettings }) {
     const ok = window.showConfirm
       ? await window.showConfirm({ type: 'warning', title: 'ออกจากระบบ', message: 'ต้องการออกจากระบบ Piggy Plan ใช่หรือไม่?', confirmText: 'ออกจากระบบ', cancelText: 'ยกเลิก' })
       : window.confirm('ต้องการออกจากระบบใช่หรือไม่?');
-    if (ok) window.location.href = '/login.html';
+    if (ok) await fbLogout();
   };
 
   return (
@@ -466,6 +467,12 @@ function SecurityTab({ profile, onClose }) {
     if (pw2 !== pw) e.pw2 = 'รหัสผ่านยืนยันไม่ตรงกัน';
     setErr(e);
     if (Object.keys(e).length) return;
+    try {
+      await fbChangePassword(cur, pw);
+    } catch (err) {
+      setErr({ cur: authMessage(err) });
+      return;
+    }
     if (window.showAlert) await window.showAlert({ title: 'เปลี่ยนรหัสผ่านแล้ว', message: 'รหัสผ่านของคุณได้รับการอัปเดตเรียบร้อย' });
     onClose();
   };
@@ -510,8 +517,13 @@ function AccountTab({ profile, onLogout, onClose }) {
           confirmText: 'ลบบัญชีของฉัน', cancelText: 'ยกเลิก' })
       : window.confirm('ลบบัญชีถาวร?');
     if (!ok) return;
-    try { localStorage.removeItem('finplan:profile'); } catch (e) {}
-    window.location.href = '/login.html';
+    try {
+      await fbDeleteAccount();   // deletes the Firebase user + their cloud doc + local data
+    } catch (err) {
+      if (window.showAlert) await window.showAlert({ type: 'warning', title: 'ลบบัญชีไม่สำเร็จ', message: authMessage(err) });
+      return;
+    }
+    // auth gate flips back to the login screen automatically
   };
 
   /* ล้างข้อมูลที่จัดเก็บไว้ทั้งหมด (รีเซ็ตแอป — ไม่ลบบัญชี) */
@@ -522,9 +534,7 @@ function AccountTab({ profile, onLogout, onClose }) {
           confirmText: 'ล้างข้อมูล', cancelText: 'ยกเลิก' })
       : window.confirm('ล้างข้อมูลที่จัดเก็บไว้ทั้งหมด?');
     if (!ok) return;
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('finplan:')).forEach(k => localStorage.removeItem(k));
-    } catch (e) {}
+    try { await resetCloudState(); } catch (e) {}   // clears local + this user's cloud doc
     if (window.showAlert) await window.showAlert({ title: 'ล้างข้อมูลแล้ว', message: 'กำลังเริ่มต้นแอปใหม่…' });
     window.location.reload();
   };

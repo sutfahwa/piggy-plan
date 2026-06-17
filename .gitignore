@@ -3,3 +3,8 @@ dist
 .DS_Store
 *.local
 .vite
+
+# Firebase config (real keys) — keep .env.example committed
+.env
+.env.*
+!.env.example
