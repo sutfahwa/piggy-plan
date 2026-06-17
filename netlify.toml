@@ -7,6 +7,12 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# Pretty URL: serve the auth page at /login (rewrite — URL stays /login).
+[[redirects]]
+  from = "/login"
+  to = "/login.html"
+  status = 200
+
 # Light caching for fingerprinted assets (safe: filenames change on rebuild).
 [[headers]]
   for = "/assets/*"
