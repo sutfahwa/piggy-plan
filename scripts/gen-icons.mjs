@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { mkdirSync } from 'node:fs';
 
 mkdirSync('assets', { recursive: true });
+mkdirSync('public', { recursive: true });
 
 // Brand-mark piggy (white line art) — same glyph used in the app header.
 const PIGGY = 'M3 11.5c0-2.8 2.6-5 6-5h3.5c.8-1 2-1.6 3.2-1.6 0 .8-.3 1.5-.7 2 .9.6 1.6 1.5 1.9 2.6l1.6.5c.4.1.6.5.6.9V14c0 .5-.4.9-.9.9h-1.2c-.4.6-.9 1.1-1.5 1.5V18a1 1 0 0 1-1 1h-1.2a1 1 0 0 1-1-1v-.6a7.7 7.7 0 0 1-2.7 0V18a1 1 0 0 1-1 1H7.9a1 1 0 0 1-1-1v-1.7C5 15.2 3.8 13.5 3.6 11.5Z';
@@ -46,15 +47,29 @@ const splashSvg = (bg) => `<svg xmlns="http://www.w3.org/2000/svg" width="2732" 
   ${piggyGroup(1102, 1097.6, 22, 1.3)}
 </svg>`;
 
-const png = (svg, file, size) =>
-  sharp(Buffer.from(svg)).resize(size, size).png().toFile('assets/' + file);
+// 1024 MASKABLE — coral bg + piggy with extra padding (art ~63%, inside the
+// maskable safe zone so launchers/PWA masks never clip it)
+const maskableSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  ${coralBg('gm')}<rect width="1024" height="1024" fill="url(#gm)"/>
+  ${piggyGroup(80, 72.8, 36, 1.15)}
+</svg>`;
+
+const png = (svg, file, size, dir = 'assets') =>
+  sharp(Buffer.from(svg)).resize(size, size).png().toFile(dir + '/' + file);
 
 await Promise.all([
+  // Capacitor (native Android) source assets
   png(fgSvg, 'icon-foreground.png', 1024),
   png(bgSvg, 'icon-background.png', 1024),
   png(iconSvg, 'icon-only.png', 1024),
   png(splashSvg('#FFF3EC'), 'splash.png', 2732),
   png(splashSvg('#2A1B17'), 'splash-dark.png', 2732),
+  // PWA / web icons (served from public/)
+  png(iconSvg, 'pwa-192.png', 192, 'public'),
+  png(iconSvg, 'pwa-512.png', 512, 'public'),
+  png(maskableSvg, 'pwa-maskable-512.png', 512, 'public'),
+  png(iconSvg, 'apple-touch-icon.png', 180, 'public'),
+  png(iconSvg, 'favicon.png', 64, 'public'),
 ]);
 
-console.log('✓ wrote assets/{icon-foreground,icon-background,icon-only,splash,splash-dark}.png');
+console.log('✓ wrote assets/ (Capacitor) + public/ (PWA) icons');

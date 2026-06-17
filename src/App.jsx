@@ -159,3 +159,9 @@ Object.assign(window, { TopNav, AppTweaks });
 const container = document.getElementById('root');
 window.__pp_root = window.__pp_root || ReactDOM.createRoot(container);
 window.__pp_root.render(<App />);
+
+// PWA: register the service worker on the web only. Inside the Capacitor
+// Android app the assets are already bundled, so we skip the SW there.
+if (import.meta.env.PROD && !window.Capacitor && 'serviceWorker' in navigator) {
+  import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
+}
