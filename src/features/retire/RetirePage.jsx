@@ -101,7 +101,7 @@ function RetirePage() {
       { id: 'a1', name: 'ตราสารหนี้', pct: 90, ret: 2.5, color: '#5E86C9' },
       { id: 'a2', name: 'ตราสารทุน', pct: 10, ret: 7, color: '#7FB46A' },
     ],
-    desiredExpense: 0, drawYears: 20,
+    desiredExpense: 0, drawYears: 20, inflation: 3,
   });
   const set = (k, v) => setS({ ...s, [k]: v });
   const DEFAULT_ASSETS = [
@@ -113,7 +113,7 @@ function RetirePage() {
     currentAge: 27, retireAge: 60, salary: 0, startBalance: 0,
     empRate: 3, companyRate: 3, salaryGrowth: 3,
     assets: DEFAULT_ASSETS.map(a => ({ ...a })),
-    desiredExpense: 0, drawYears: 20,
+    desiredExpense: 0, drawYears: 20, inflation: 3,
   });
 
   /* --- จัดการประเภทการลงทุน --- */
@@ -130,15 +130,20 @@ function RetirePage() {
   const plan = pvdPlan(s);
   const gainPct = plan.contributed > 0 ? Math.round(plan.gain / plan.contributed * 100) : 0;
   const hasGoal = s.desiredExpense > 0;
-  const enough = plan.monthlyDraw >= s.desiredExpense;
-  const diff = Math.abs(plan.monthlyDraw - s.desiredExpense);
 
   /* เป้าหมายหลังเกษียณ: ต้องมีเงินก้อนเท่าไหร่ / ขาดอีกกี่บาท / ต้องออมเพิ่มเดือนละเท่าไหร่ */
-  const mr = Math.pow(1 + plan.blended, 1 / 12) - 1;
+  const infl = (s.inflation != null ? s.inflation : 3) / 100;
+  const mr = Math.pow(1 + plan.blended, 1 / 12) - 1;            // ผลตอบแทนรายเดือน (ช่วงสะสม)
   const dMonths = Math.max(1, s.drawYears * 12);
-  const requiredNest = Math.abs(mr) < 1e-9
-    ? s.desiredExpense * dMonths
-    : s.desiredExpense * (1 - Math.pow(1 + mr, -dMonths)) / mr;
+  // ค่าใช้จ่ายที่ต้องใช้ต่อเดือน ณ วันเกษียณ = ค่าปัจจุบันปรับด้วยเงินเฟ้อตลอดช่วงก่อนเกษียณ
+  const futMonthly = s.desiredExpense * Math.pow(1 + infl, plan.years);
+  // หลังเกษียณค่าใช้จ่ายโตตามเงินเฟ้อ จึงคิดเงินก้อนที่ต้องมีด้วย "ผลตอบแทนแท้จริง" (หักเงินเฟ้อ)
+  const realAnnual = (1 + plan.blended) / (1 + infl) - 1;
+  const mrReal = Math.pow(1 + realAnnual, 1 / 12) - 1;
+  const requiredNest = Math.abs(mrReal) < 1e-9
+    ? futMonthly * dMonths
+    : futMonthly * (1 - Math.pow(1 + mrReal, -dMonths)) / mrReal;
+  const enough = plan.finalBal >= requiredNest;
   const shortLump = Math.max(0, requiredNest - plan.finalBal);
   const surplusLump = Math.max(0, plan.finalBal - requiredNest);
   const saveMonths = Math.max(1, plan.years * 12);
@@ -266,17 +271,19 @@ function RetirePage() {
               <MoneyInput value={s.desiredExpense} onChange={v => set('desiredExpense', v)} />
             </div>
             <SliderField label="อยากใช้เงินก้อนนี้ได้นาน" value={s.drawYears} min={0} max={50} suffix="ปี" onChange={v => set('drawYears', v)} />
+            <SliderField label="เงินเฟ้อเฉลี่ย/ปี" value={s.inflation != null ? s.inflation : 3} min={0} max={10} step={0.5} suffix="%" onChange={v => set('inflation', v)} />
           </div>
 
           {hasGoal ? (
             <div className="verdict" style={{ background: enough ? '#EAF6E0' : '#FFEAE6' }}>
+              <div className="goal-row"><span>ค่าใช้จ่าย/เดือน ณ วันเกษียณ <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>(ปรับเงินเฟ้อ {fmt(s.inflation != null ? s.inflation : 3, 1)}%/ปี)</span></span><b>{baht(futMonthly)}</b></div>
               <div className="goal-row"><span>ต้องมีเงินก้อน ณ วันเกษียณ</span><b>{baht(requiredNest)}</b></div>
               <div className="goal-row"><span>คาดว่าจะมีจากกองทุน</span><b>{baht(plan.finalBal)}</b></div>
               <hr className="divider" style={{ margin: '11px 0' }} />
               {enough ? (
                 <div>
                   <div style={{ color: 'var(--mint-deep)', fontWeight: 700, fontSize: 16 }}>🎉 เพียงพอ! เกินเป้าอีก {baht(surplusLump)}</div>
-                  <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>ใช้ได้จริงเดือนละ {baht(plan.monthlyDraw)} · มากกว่าเป้า {baht(diff)}/เดือน</div>
+                  <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>มีเงินก้อนมากกว่าที่ต้องใช้ — รองรับค่าใช้จ่ายที่ปรับเงินเฟ้อแล้วได้ครบ {s.drawYears} ปี</div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

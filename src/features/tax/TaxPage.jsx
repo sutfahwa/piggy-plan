@@ -170,7 +170,10 @@ function TaxPage() {
   const donationItems = DEDUCTION_ITEMS.filter(d => d.pctNet);
   const donationTotal = donationItems.reduce((s, d) => {
     const st = dedState(d.id);
-    return s + (st.on ? Math.min(st.amount, donationCap) : 0);
+    if (!st.on) return s;
+    // บางรายการ (เช่น บริจาคการศึกษา) หักได้ 2 เท่าของที่จ่าย — แล้วจึงคุมด้วยเพดาน 10%
+    const deduct = (d.factor || 1) * st.amount;
+    return s + Math.min(deduct, donationCap);
   }, 0);
 
   const optionalDeductions = nonDonationTotal + customTotal + donationTotal;
@@ -199,8 +202,8 @@ function TaxPage() {
     ? `มากกว่า ${baht(bracket.from)}`
     : `${baht(bracket.from)} – ${baht(bracket.to)}`;
 
-  // เพดานที่ใช้กรอกของแต่ละรายการ
-  const inputCap = (d) => d.pctNet ? Math.max(donationCap, dedState(d.id).amount) : capOf(d);
+  // เพดานที่ใช้กรอกของแต่ละรายการ (รายการ factor เช่นบริจาคการศึกษา กรอก "ที่จ่าย" ได้ถึงเพดาน ÷ factor)
+  const inputCap = (d) => d.pctNet ? Math.max(Math.floor(donationCap / (d.factor || 1)), dedState(d.id).amount) : capOf(d);
 
   const addCustom = () => {
     const nm = newName.trim();
