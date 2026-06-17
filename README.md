@@ -2,7 +2,12 @@
 
 A friendly Thai personal-finance app: monthly budgeting, income-tax planning
 (สิทธิลดหย่อน ปีภาษี 2569), overtime (OT) calculation, and provident-fund (PVD)
-retirement projection — plus account/profile management and auth.
+retirement projection. All data is stored **on-device** (`localStorage`) — no
+sign-in required.
+
+> The account/profile feature (login, profile, change password, account
+> settings) is currently **hidden** behind a flag — the code is kept, not
+> deleted. See [Account feature (hidden)](#account-feature-hidden).
 
 Implemented from a [Claude Design](https://claude.ai/design) handoff bundle as a
 real **Vite + React** app. Each feature lives in its own folder so it can be
@@ -41,9 +46,9 @@ PiggyPlan/
         ├── tax/            # วางแผนภาษี — income tax + deductions calculator
         ├── ot/             # คำนวณค่าล่วงเวลา — OT worksheet
         ├── retire/         # กองทุนสำรองเลี้ยงชีพ — PVD projection
-        ├── settings/       # full-page account settings
-        ├── profile/        # profile menu + settings modal + tabs (Avatar, ProfileMenu)
-        └── auth/           # login / signup / forgot-password (standalone page)
+        ├── settings/       # full-page account settings        (hidden — see flag)
+        ├── profile/        # profile menu + settings modal + tabs (hidden — holds the flag)
+        └── auth/           # login / signup / forgot-password   (hidden — orphaned page)
 ```
 
 ### Per-feature → per-branch workflow
@@ -68,6 +73,24 @@ what it needs via a destructure from `window`. `App.jsx` additionally imports
 each feature page so their components register before the app mounts.
 
 State persists to `localStorage` under the `finplan:` prefix.
+
+## Account feature (hidden)
+
+Login, profile management, change-password, account settings, and logout are
+currently **turned off** so the app runs purely on-device with no sign-in. The
+code is intact — nothing was deleted.
+
+`ProfileMenu` (the avatar at the top-right) is the only entry point to all of
+these, so a single flag gates everything across web **and** mobile:
+
+```js
+// src/features/profile/profile.jsx
+const ACCOUNT_ENABLED = false;   // ← set to true to restore the account feature
+```
+
+When `false`, `ProfileMenu` renders nothing, so the avatar, profile dropdown,
+settings page, and logout/login redirect never appear. `login.html` still builds
+but nothing links to it. Flip the flag to `true` to bring the whole feature back.
 
 ## Android app (Capacitor)
 
