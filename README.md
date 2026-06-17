@@ -92,6 +92,18 @@ When `false`, `ProfileMenu` renders nothing, so the avatar, profile dropdown,
 settings page, and logout/login redirect never appear. `login.html` still builds
 but nothing links to it. Flip the flag to `true` to bring the whole feature back.
 
+## Install on mobile (PWA)
+
+The deployed web app is an installable PWA (`vite-plugin-pwa` — manifest +
+Workbox service worker), so it works **without** the APK on any phone:
+
+- **Android (Chrome):** open the site → menu → **Add to Home screen / Install app**.
+- **iOS (Safari):** open the site → Share → **Add to Home Screen**.
+
+It then launches full-screen (standalone), shows the piggy icon, and works
+offline (the app shell is precached). The service worker only runs on the web —
+it is intentionally skipped inside the Capacitor Android app.
+
 ## Android app (Capacitor)
 
 The web app is wrapped as a native Android app with [Capacitor](https://capacitorjs.com).
