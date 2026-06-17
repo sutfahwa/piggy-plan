@@ -150,12 +150,18 @@ function TaxPage() {
     return d.max;
   };
 
-  /* ---- รวมค่าลดหย่อน (กลุ่มทั่วไปก่อน แล้วค่อยคิดเพดานเงินบริจาค) ---- */
+  /* ---- รวมค่าลดหย่อน (เพดานรายข้อ + เพดานรวมกลุ่มตามสรรพากร แล้วค่อยคิดเพดานเงินบริจาค) ---- */
   const optItems = DEDUCTION_ITEMS.filter(d => !d.locked && !d.pctNet);
-  const nonDonationTotal = optItems.reduce((s, d) => {
-    const st = dedState(d.id);
-    return s + (st.on ? Math.min(st.amount, capOf(d)) : 0);
-  }, 0);
+  // หักเพดานรายข้อก่อน
+  const capById = {};
+  optItems.forEach(d => { const st = dedState(d.id); capById[d.id] = st.on ? Math.min(st.amount, capOf(d)) : 0; });
+  const groupSum = ids => ids.reduce((s, id) => s + (capById[id] || 0), 0);
+  // เพดาน "รวมกลุ่ม" ตามกฎหมาย — แม้แต่ละข้อจะไม่เกินเพดานของตัวเอง รวมกันต้องไม่เกินเพดานกลุ่ม
+  const RETIRE_GROUP = ['pension', 'rmf', 'pvd', 'gpf', 'nsf']; // ประกันบำนาญ+RMF+PVD+กบข.+กอช. รวมไม่เกิน 500,000
+  const INSURE_GROUP = ['lifeins', 'health'];                  // ประกันชีวิตทั่วไป+ประกันสุขภาพตนเอง รวมไม่เกิน 100,000
+  const retireExcess = Math.max(0, groupSum(RETIRE_GROUP) - 500000);
+  const insureExcess = Math.max(0, groupSum(INSURE_GROUP) - 100000);
+  const nonDonationTotal = optItems.reduce((s, d) => s + capById[d.id], 0) - retireExcess - insureExcess;
   const customTotal = customDed.reduce((s, c) => s + (Number(c.amount) || 0), 0);
 
   // เพดานเงินบริจาค = 10% ของเงินได้หลังหักค่าลดหย่อนอื่น
@@ -303,6 +309,12 @@ function TaxPage() {
             <div className="card-h"><span style={{ fontSize: 20 }}>🧾</span><h3>รายการลดหย่อนภาษี</h3>
               <span className="sub" style={{ marginLeft: 'auto' }}>เปิดสิทธิ์ที่คุณมี</span></div>
             <div className="ref-note">อ้างอิงสิทธิลดหย่อนภาษีเงินได้บุคคลธรรมดา — ปีภาษี 2569</div>
+            {(retireExcess > 0 || insureExcess > 0) && (
+              <div className="ref-note" style={{ background: '#FFF1E0', color: 'var(--warn)', border: '1px solid #F6D9A8', marginTop: 8 }}>
+                {retireExcess > 0 && <div>⚠️ กลุ่มเกษียณ (บำนาญ + RMF + PVD + กบข. + กอช.) รวมกันเกินเพดาน — หักได้สูงสุด 500,000 (เกินมา {baht(retireExcess)})</div>}
+                {insureExcess > 0 && <div>⚠️ ประกันชีวิต + ประกันสุขภาพตนเอง รวมกันเกินเพดาน — หักได้สูงสุด 100,000 (เกินมา {baht(insureExcess)})</div>}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px', background: 'var(--surface-2)', borderRadius: 14, marginBottom: 6, marginTop: 12 }}>
               <div>
