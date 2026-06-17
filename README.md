@@ -68,3 +68,39 @@ what it needs via a destructure from `window`. `App.jsx` additionally imports
 each feature page so their components register before the app mounts.
 
 State persists to `localStorage` under the `finplan:` prefix.
+
+## Android app (Capacitor)
+
+The web app is wrapped as a native Android app with [Capacitor](https://capacitorjs.com).
+The native project lives in `android/` (`appId` `com.piggyplan.app`).
+
+```bash
+npm run android:sync   # build web → copy into the Android project
+npm run android:open   # …and open it in Android Studio
+npm run android:apk    # …and build a debug APK via Gradle
+```
+
+The debug APK is produced at:
+
+```
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Install it on a device/emulator with:
+
+```bash
+~/Library/Android/sdk/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Requirements: JDK 21, Android SDK (compile/target SDK 35). After changing any web
+code, re-run `npm run android:sync` (or `android:apk`) so the native project picks
+up the new build.
+
+Notes:
+- Google Fonts load from the CDN, so the first launch needs an internet connection
+  (fonts then cache). Everything else runs fully offline.
+- Excel export uses a browser download, which behaves differently inside the
+  Android WebView — for a production release this should move to Capacitor's
+  Filesystem + Share plugins.
+- This builds a **debug** APK. A Play Store release needs a signed release build
+  (`assembleRelease` with a keystore).
