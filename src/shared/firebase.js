@@ -130,8 +130,13 @@ export function authMessage(err) {
     'auth/weak-password': 'รหัสผ่านอ่อนเกินไป (อย่างน้อย 6 ตัวอักษร)',
     'auth/too-many-requests': 'พยายามหลายครั้งเกินไป ลองใหม่ภายหลัง',
     'auth/popup-closed-by-user': 'ปิดหน้าต่าง Google ก่อนเข้าสู่ระบบ',
+    'auth/popup-blocked': 'เบราว์เซอร์บล็อกป๊อปอัป Google — อนุญาตป๊อปอัปแล้วลองใหม่',
     'auth/network-request-failed': 'เชื่อมต่อเครือข่ายไม่สำเร็จ',
     'auth/requires-recent-login': 'โปรดเข้าสู่ระบบใหม่อีกครั้งก่อนทำรายการนี้',
+    'auth/operation-not-allowed': 'ยังไม่ได้เปิดวิธีล็อกอินนี้ใน Firebase (Authentication → Sign-in method)',
+    'auth/unauthorized-domain': 'โดเมนนี้ยังไม่ได้รับอนุญาต (Firebase → Authentication → Settings → Authorized domains)',
+    'auth/configuration-not-found': 'ยังไม่ได้ตั้งค่า Authentication ใน Firebase (เปิด Email/Password ก่อน)',
+    'auth/api-key-not-valid': 'API key ไม่ถูกต้อง ตรวจค่าใน .env อีกครั้ง',
   };
   return map[c] || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
 }
