@@ -119,6 +119,19 @@ Requirements: JDK 21, Android SDK (compile/target SDK 35). After changing any we
 code, re-run `npm run android:sync` (or `android:apk`) so the native project picks
 up the new build.
 
+### App name & icon
+
+The launcher name is **Piggy Plan** (`android/app/src/main/res/values/strings.xml`).
+The launcher icon is the brand mark (white piggy on a coral gradient). Source art
+is rendered by `scripts/gen-icons.mjs` into `assets/`, then expanded to every
+density + adaptive/round icon + splash:
+
+```bash
+npm run android:icons   # regenerate icons from scripts/gen-icons.mjs
+```
+
+Edit the piggy/colors in `scripts/gen-icons.mjs` and re-run to restyle.
+
 Notes:
 - Google Fonts load from the CDN, so the first launch needs an internet connection
   (fonts then cache). Everything else runs fully offline.
