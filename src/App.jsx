@@ -13,6 +13,7 @@ import './features/retire/RetirePage.jsx';
 import './features/settings/SettingsPage.jsx';
 import AuthScreen from './features/auth/AuthScreen.jsx';
 import VerifyEmail from './features/auth/VerifyEmail.jsx';
+import AuthAction from './features/auth/AuthAction.jsx';
 import { firebaseReady, watchAuth, hydrateFromCloud, saveToCloud, logout as fbLogout } from './shared/firebase.js';
 const {
   useStored, useTweaks, TweaksPanel, TweakSection, TweakRadio, ConfirmHost,
@@ -213,6 +214,10 @@ function Root() {
   }, [state.user]);
 
   if (!firebaseReady) return <ConfigNeeded />;
+  // Firebase email links land here (?mode=…&oobCode=…) — show our branded handler.
+  const p = new URLSearchParams(window.location.search);
+  const mode = p.get('mode'), oobCode = p.get('oobCode');
+  if (mode && oobCode) return <AuthAction mode={mode} oobCode={oobCode} />;
   if (state.loading) return <Splash />;
   if (!state.user) return <AuthScreen />;
   if (!state.user.emailVerified) return <VerifyEmail user={state.user} />;  // must click the email link first

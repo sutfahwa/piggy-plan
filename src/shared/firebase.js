@@ -12,7 +12,7 @@ import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup,
   sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile,
   updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser,
-  sendEmailVerification,
+  sendEmailVerification, applyActionCode, verifyPasswordResetCode, confirmPasswordReset,
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -106,6 +106,13 @@ export async function signUpEmail(name, email, pw) {
 // Resend the verification link, and re-check whether the user has clicked it yet.
 export const resendVerification = () => sendEmailVerification(auth.currentUser);
 export async function reloadUser() { if (auth && auth.currentUser) await auth.currentUser.reload(); return auth && auth.currentUser; }
+
+/* ---------- email-link actions (verify / reset password) ----------
+   Used by our own branded action page so the link in the email lands on a
+   nice screen instead of Firebase's default handler. */
+export const applyVerify = (oobCode) => applyActionCode(auth, oobCode);
+export const verifyResetCode = (oobCode) => verifyPasswordResetCode(auth, oobCode); // resolves to the email
+export const confirmReset = (oobCode, newPw) => confirmPasswordReset(auth, oobCode, newPw);
 export const signInGoogle = () => signInWithPopup(auth, googleProvider);
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 export async function logout() { clearLocalState(); if (auth) await signOut(auth); }
