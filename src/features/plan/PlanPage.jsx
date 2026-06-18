@@ -689,6 +689,32 @@ function PlanMonthly() {
     return function (newCats) {setPlanCats(Object.assign({}, planCats, { [key]: newCats }));};
   }
 
+  // ชื่อหมวดหมู่จาก id
+  const catLabel = (sec, catId) => {
+    const c = (planCats[sec] || []).find((x) => x.id === catId);
+    return c ? c.name : '';
+  };
+  // เติมชื่อให้รายการที่เว้นว่าง (ใช้ชื่อหมวด) — ตาราง "กรอกแยกแต่ละรายการ" จับคู่ด้วยชื่อ
+  // รายการที่ไม่มีชื่อจึงเคยหายไป ตรงนี้ backfill ของเดิมให้แสดงครบ (รันครั้งเดียวตอนโหลด)
+  React.useEffect(() => {
+    const SECS = ['income', 'saving', 'fixedExp', 'varExp'];
+    let changed = false;
+    const next = {};
+    Object.keys(allPlans).forEach((k) => {
+      const p = allPlans[k] || {};
+      const np = Object.assign({}, p);
+      SECS.forEach((sec) => {
+        np[sec] = (p[sec] || []).map((it) => {
+          if (it.name && String(it.name).trim()) return it;
+          changed = true;
+          return Object.assign({}, it, { name: catLabel(sec, it.cat) || 'รายการ' });
+        });
+      });
+      next[k] = np;
+    });
+    if (changed) setAllPlans(next);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Inline edit of a month's section TOTAL from the all-months table.
   // Non-destructive: keeps existing item breakdown by scaling proportionally;
   // creates a single labelled row when the month/section is still empty.
@@ -795,7 +821,7 @@ function PlanMonthly() {
   }
   function addSec(key) {
     const firstCat = planCats[key] && planCats[key][0] ? planCats[key][0].id : '';
-    return () => setPlan({ ...plan, [key]: [...plan[key], { id: makeId(key[0]), name: '', amount: 0, cat: firstCat }] });
+    return () => setPlan({ ...plan, [key]: [...plan[key], { id: makeId(key[0]), name: catLabel(key, firstCat) || '', amount: 0, cat: firstCat }] });
   }
 
   return (
