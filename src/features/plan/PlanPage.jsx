@@ -1472,6 +1472,7 @@ function TargetField({ value, onChange }) {
    ============================================================ */
 function SavingsByYear({ savings, setSavings }) {
   const [allMonthPlans] = useStored('plan.months.v3', {});
+  const [startBalance, setStartBalance] = useStored('savings.start.v1', 0); // เงินเก็บตั้งต้น (ฐานก่อนเริ่มบันทึก)
   const [year, setYear] = React.useState(CURRENT_YEAR);
   const [addingCol, setAddingCol] = React.useState(false);
   const [newColName, setNewColName] = React.useState('');
@@ -1484,10 +1485,10 @@ function SavingsByYear({ savings, setSavings }) {
   const curMonthIdx = year === CURRENT_YEAR ? new Date().getMonth() : -1;
   const editable = year >= CURRENT_YEAR;
 
-  // ยอดสะสมสุทธิ = ยอดยกมาต้นปี + สุทธิรายเดือนสะสม (ยกยอดข้ามปี → คำนวณ แก้ไม่ได้)
+  // ยอดสะสมสุทธิ = เงินเก็บตั้งต้น + ยอดยกมาต้นปี + สุทธิรายเดือนสะสม (ยกยอดข้ามปี → คำนวณ แก้ไม่ได้)
   const prior = priorBal(savings, year);
   const bals = [];
-  let acc = prior;
+  let acc = (Number(startBalance) || 0) + prior;
   for (let i = 0; i < 12; i++) {acc += monthNet(months[i], cols);bals.push(acc);}
 
   const totSave = months.reduce((s, m) => s + m.save, 0);
@@ -1561,6 +1562,10 @@ function SavingsByYear({ savings, setSavings }) {
           onChange={setYear}
           options={YEAR_KEYS.map(function (y) {return { value: y, label: yearLabel(y) + (y === CURRENT_YEAR ? ' ● ปีนี้' : '') };})}
           style={{ minWidth: 150 }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 13.5, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>เงินเก็บตั้งต้น</span>
+          <AmtInput value={Number(startBalance) || 0} onChange={setStartBalance} style={{ flex: '0 0 120px' }} />
+        </span>
         <div style={{ flex: 1 }} />
         <ExportBtn label="Export Excel" onClick={exportYearXLSX} />
         <TargetField value={target} onChange={setTarget} />
@@ -1710,6 +1715,7 @@ function SavingsByYear({ savings, setSavings }) {
    3b) เงินเก็บ — รวมหลายปี (ยกยอดข้ามปี)
    ============================================================ */
 function SavingsMultiYear({ savings }) {
+  const [startBalance] = useStored('savings.start.v1', 0); // เงินเก็บตั้งต้น (ฐานเดียวกับหน้ารายปี)
   const [sel, setSel] = React.useState([CURRENT_YEAR]);
   function toggle(y) {
     setSel(function (prev) {return prev.indexOf(y) >= 0 ? prev.filter(function (x) {return x !== y;}) : prev.concat([y]);});
@@ -1733,8 +1739,8 @@ function SavingsMultiYear({ savings }) {
   const sumBonus = rows.reduce(function (s, r) {return s + r.totBonus;}, 0);
   const sumDed = rows.reduce(function (s, r) {return s + r.totDed;}, 0);
 
-  // ยอดเงินเก็บปัจจุบัน = ยกยอดข้ามปีของทุกปีจนถึงปีปัจจุบัน
-  let current = 0;
+  // ยอดเงินเก็บปัจจุบัน = เงินเก็บตั้งต้น + ยกยอดข้ามปีของทุกปีจนถึงปีปัจจุบัน
+  let current = (Number(startBalance) || 0);
   YEAR_KEYS.forEach(function (y) {if (y <= CURRENT_YEAR) current += yearNet(savings, y);});
 
   /* ── Excel export: selected years ── */
