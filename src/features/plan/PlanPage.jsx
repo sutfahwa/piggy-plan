@@ -694,6 +694,27 @@ function PlanMonthly() {
     const c = (planCats[sec] || []).find((x) => x.id === catId);
     return c ? c.name : '';
   };
+  // id หมวดจากชื่อ (ใช้จับคู่เวลาตั้งชื่อรายการให้ตรงกับหมวด)
+  const catIdByName = (sec, nm) => {
+    const c = (planCats[sec] || []).find((x) => x.name === String(nm).trim());
+    return c ? c.id : '';
+  };
+  // หมวด "อื่นๆ" (ตัวสุดท้าย) ใช้เป็นค่าเริ่มต้นของรายการที่เพิ่มจากตารางแยก — ดีกว่าใส่หมวดแรกผิดๆ
+  const genericCatOf = (sec) => {
+    const cs = planCats[sec] || [];
+    const o = cs.find((x) => x.name === 'อื่นๆ');
+    return o ? o.id : (cs.length ? cs[cs.length - 1].id : '');
+  };
+  // เลือกหมวดให้เหมาะกับชื่อรายการ: ถ้าชื่อตรงกับหมวด ใช้หมวดนั้น ไม่งั้นใช้ "อื่นๆ"
+  const catForName = (sec, nm) => catIdByName(sec, nm) || genericCatOf(sec);
+  // ชื่อรายการที่ไม่ซ้ำกับที่มีอยู่แล้วในทั้งปีของ section นั้น (กันยุบรวมในตารางแยก)
+  const uniqueRowName = (sec, base) => {
+    const used = new Set();
+    for (let m = 0; m < 12; m++) { const p = allPlans[year + '-' + m]; if (p) (p[sec] || []).forEach((r) => { if (r.name) used.add(r.name); }); }
+    if (!used.has(base)) return base;
+    let n = 2; while (used.has(base + ' ' + n)) n++;
+    return base + ' ' + n;
+  };
   // เติมชื่อให้รายการที่เว้นว่าง (ใช้ชื่อหมวด) — ตาราง "กรอกแยกแต่ละรายการ" จับคู่ด้วยชื่อ
   // รายการที่ไม่มีชื่อจึงเคยหายไป ตรงนี้ backfill ของเดิมให้แสดงครบ (รันครั้งเดียวตอนโหลด)
   React.useEffect(() => {
@@ -755,7 +776,7 @@ function PlanMonthly() {
       const idx = rows.findIndex(function (r) {return r.name === name;});
       let nr;
       if (idx >= 0) nr = rows.map(function (r, i) {return i === idx ? Object.assign({}, r, { amount: value }) : r;});else
-      nr = rows.concat([{ id: makeId(section[0]), name: name, amount: value, cat: firstCatOf(section) }]);
+      nr = rows.concat([{ id: makeId(section[0]), name: name, amount: value, cat: catForName(section, name) }]);
       return Object.assign({}, prev, { [mkey]: Object.assign({}, p, { [section]: nr }) });
     });
   }
@@ -772,7 +793,7 @@ function PlanMonthly() {
         const mkey = year + '-' + m;
         const p = next[mkey] || emptyPlan();
         const rows = (p[section] || []).slice();
-        if (!rows.some(function (r) {return r.name === name;})) rows.push({ id: makeId(section[0]), name: name, amount: 0, cat: firstCatOf(section) });
+        if (!rows.some(function (r) {return r.name === name;})) rows.push({ id: makeId(section[0]), name: name, amount: 0, cat: catForName(section, name) });
         next[mkey] = Object.assign({}, p, { [section]: rows });
       }
       return next;
@@ -780,13 +801,14 @@ function PlanMonthly() {
   }
   function detailRenameRow(section, oldName, newName) {
     if (!newName || newName === oldName) return;
+    const matchCat = catIdByName(section, newName); // ตั้งชื่อตรงหมวด → ผูกหมวดให้ด้วย
     setAllPlans(function (prev) {
       const next = Object.assign({}, prev);
       for (let m = 0; m < 12; m++) {
         const mkey = year + '-' + m;
         const p = next[mkey];
         if (!p || !p[section]) continue;
-        next[mkey] = Object.assign({}, p, { [section]: p[section].map(function (r) {return r.name === oldName ? Object.assign({}, r, { name: newName }) : r;}) });
+        next[mkey] = Object.assign({}, p, { [section]: p[section].map(function (r) {return r.name === oldName ? Object.assign({}, r, { name: newName }, matchCat ? { cat: matchCat } : {}) : r;}) });
       }
       return next;
     });
@@ -821,7 +843,7 @@ function PlanMonthly() {
   }
   function addSec(key) {
     const firstCat = planCats[key] && planCats[key][0] ? planCats[key][0].id : '';
-    return () => setPlan({ ...plan, [key]: [...plan[key], { id: makeId(key[0]), name: catLabel(key, firstCat) || '', amount: 0, cat: firstCat }] });
+    return () => setPlan({ ...plan, [key]: [...plan[key], { id: makeId(key[0]), name: uniqueRowName(key, 'รายการใหม่'), amount: 0, cat: firstCat }] });
   }
 
   return (
