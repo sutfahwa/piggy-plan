@@ -13,8 +13,10 @@ import {
   sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile,
   updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser,
   sendEmailVerification, applyActionCode, verifyPasswordResetCode, confirmPasswordReset,
+  connectAuthEmulator,
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp, connectFirestoreEmulator } from 'firebase/firestore';
+import { saveToSQLite, hydrateFromSQLite } from './sqlite';
 
 const cfg = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,6 +30,7 @@ const cfg = {
 // True once a real config is present (lets the app show a friendly setup notice
 // instead of crashing when .env is empty).
 export const firebaseReady = !!cfg.apiKey && !!cfg.projectId;
+const IS_DEV = import.meta.env.DEV;
 
 let auth = null, db = null;
 export const googleProvider = new GoogleAuthProvider();
@@ -37,6 +40,14 @@ if (firebaseReady) {
   auth = getAuth(app);
   db = getFirestore(app);
   setPersistence(auth, browserLocalPersistence).catch(() => {});
+  // In DEV, route auth to the local Firebase Auth Emulator so test sign-ups
+  // never touch the production user pool. (Data already goes to local SQLite.)
+  // Start it with `npm run emu`. Production builds never reach this branch.
+  if (IS_DEV) {
+    try { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); } catch (e) {}
+    try { connectFirestoreEmulator(db, '127.0.0.1', 8080); } catch (e) {}
+    console.log('🔧 DEV: Firebase Auth/Firestore emulators (local test — not production)');
+  }
 }
 export { auth, db };
 
@@ -65,6 +76,15 @@ function applyIdentity(user) {
 // Pull this user's saved state into localStorage (clearing whatever was there).
 export async function hydrateFromCloud(user) {
   clearLocalState();
+
+  if (IS_DEV) {
+    console.log('SQLite: Hydrating from local DB...');
+    const map = await hydrateFromSQLite(user.uid);
+    Object.entries(map).forEach(([k, v]) => { if (k.startsWith(PREFIX)) localStorage.setItem(k, v); });
+    applyIdentity(user);
+    return;
+  }
+
   if (db) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
@@ -79,9 +99,17 @@ export async function hydrateFromCloud(user) {
 
 // Push the current localStorage snapshot to the user's Firestore doc.
 export async function saveToCloud(uid) {
+  const snapshot = snapshotLocal();
+
+  if (IS_DEV) {
+    console.log('SQLite: Saving to local DB...');
+    await saveToSQLite(uid, snapshot);
+    return;
+  }
+
   if (!db) return;
   try {
-    await setDoc(doc(db, 'users', uid), { stateJson: JSON.stringify(snapshotLocal()), updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, 'users', uid), { stateJson: JSON.stringify(snapshot), updatedAt: serverTimestamp() }, { merge: true });
   } catch (e) { /* will retry on next change */ }
 }
 

@@ -109,6 +109,28 @@ security rules + Auth, not by hiding the keys. `.env` is gitignored anyway.
 > WebView; email/password works there. For native Google sign-in later, add the
 > `@capacitor-firebase/authentication` plugin.
 
+### Local testing (never touches production)
+
+In **dev mode** (`npm run dev`) the app is fully isolated from production:
+
+- **Accounts → Firebase Auth Emulator** (local) — test sign-ups never hit the
+  production user pool.
+- **Data → local SQLite** (`src/shared/sqlite.js`) — saved on your machine, not
+  Firestore. Inspect it in **DBeaver** by exporting the file: open the browser
+  console and run `downloadDB()` (from `src/shared/db-tool.js`), then open the
+  downloaded `.db` in DBeaver.
+
+Run two terminals:
+
+```bash
+npm run emu    # 1) start Firebase emulators (Auth + Firestore) — UI at http://localhost:4000
+npm run dev    # 2) start the app (it auto-connects to the emulators in dev)
+```
+
+All of this is **dev-only** (`import.meta.env.DEV`) and is stripped from the
+production build — `npm run build` / Netlify always use the real Firebase
+project. (Emulators need JDK, which the Android setup already requires.)
+
 ## Install on mobile (PWA)
 
 The deployed web app is an installable PWA (`vite-plugin-pwa` — manifest +

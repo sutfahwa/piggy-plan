@@ -3,8 +3,12 @@
    ============================================================ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { defineCustomElements as jeepSqlite } from 'jeep-sqlite/loader';
 import './styles.css';
 import './shared/globals.js';
+
+// Define jeep-sqlite custom element for web
+jeepSqlite(window);
 import './features/welcome/WelcomeScreen.jsx';
 import './features/plan/PlanPage.jsx';
 import './features/tax/TaxPage.jsx';

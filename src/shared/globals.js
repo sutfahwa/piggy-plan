@@ -14,3 +14,4 @@ import './modal.jsx';
 import './tweaks-panel.jsx';
 import '../features/profile/profile.jsx';
 import './nav.jsx';
+import './db-tool.js';
