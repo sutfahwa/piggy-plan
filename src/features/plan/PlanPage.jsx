@@ -410,33 +410,43 @@ function DCell({ value, onChange, color, bg }) {
 }
 
 /* ─── editable row-name (renames the item across all 12 months) ─── */
-function RowName({ name, onRename, onDelete }) {
+function RowName({ name, cat, cats, onRename, onDelete, onSetCat }) {
   const [editing, setEditing] = React.useState(false);
   const [val, setVal] = React.useState(name);
   React.useEffect(function () {if (!editing) setVal(name);}, [name, editing]);
   const commit = function () {const v = val.trim();if (v && v !== name) onRename(v);setEditing(false);};
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      {editing ?
-      <input
-        autoFocus value={val}
-        onChange={function (e) {setVal(e.target.value);}}
-        onBlur={commit}
-        onKeyDown={function (e) {if (e.key === 'Enter') commit();if (e.key === 'Escape') {setVal(name);setEditing(false);}}}
-        style={{ flex: 1, minWidth: 0, border: 'none', borderBottom: '2px solid var(--accent)', background: '#fff', font: 'inherit', fontSize: 13.5, padding: '3px 2px', outline: 'none' }} /> :
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {editing ?
+        <input
+          autoFocus value={val}
+          onChange={function (e) {setVal(e.target.value);}}
+          onBlur={commit}
+          onKeyDown={function (e) {if (e.key === 'Enter') commit();if (e.key === 'Escape') {setVal(name);setEditing(false);}}}
+          style={{ flex: 1, minWidth: 0, border: 'none', borderBottom: '2px solid var(--accent)', background: '#fff', font: 'inherit', fontSize: 13.5, padding: '3px 2px', outline: 'none' }} /> :
 
-
-      <span
-        onClick={function () {setEditing(true);}} title="คลิกเพื่อเปลี่ยนชื่อรายการ"
-        style={{ flex: 1, minWidth: 0, fontSize: 13.5, cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {name}</span>
-      }
-      <button
-        onClick={onDelete} title="ลบรายการนี้ (ทั้งปี)"
-        onMouseEnter={function (e) {e.currentTarget.style.opacity = 1;e.currentTarget.style.color = 'var(--coral-deep)';}}
-        onMouseLeave={function (e) {e.currentTarget.style.opacity = .4;e.currentTarget.style.color = 'var(--ink-faint)';}}
-        style={{ flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-faint)', padding: '2px 3px', opacity: .4, transition: 'opacity .15s, color .15s', display: 'flex' }}>
-        <Ic d={ICONS.trash} size={13} /></button>
+        <span
+          onClick={function () {setEditing(true);}} title="คลิกเพื่อเปลี่ยนชื่อรายการ"
+          style={{ flex: 1, minWidth: 0, fontSize: 13.5, cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {name}</span>
+        }
+        <button
+          onClick={onDelete} title="ลบรายการนี้ (ทั้งปี)"
+          onMouseEnter={function (e) {e.currentTarget.style.opacity = 1;e.currentTarget.style.color = 'var(--coral-deep)';}}
+          onMouseLeave={function (e) {e.currentTarget.style.opacity = .4;e.currentTarget.style.color = 'var(--ink-faint)';}}
+          style={{ flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-faint)', padding: '2px 3px', opacity: .4, transition: 'opacity .15s, color .15s', display: 'flex' }}>
+          <Ic d={ICONS.trash} size={13} /></button>
+      </div>
+      {/* ป้ายประเภท (เลือก/แก้ได้ในตารางนี้เลย) */}
+      {cats && cats.length > 0 && onSetCat &&
+      <select
+        value={cat || ''}
+        onChange={function (e) {onSetCat(e.target.value);}}
+        title="ประเภทของรายการนี้ — เปลี่ยนได้"
+        style={{ alignSelf: 'flex-start', maxWidth: '100%', border: '1px solid var(--line)', background: 'var(--surface-2)', borderRadius: 99, fontSize: 10.5, color: 'var(--ink-soft)', padding: '1px 6px', fontFamily: 'var(--font-body)', cursor: 'pointer', appearance: 'auto' }}>
+        {cats.map(function (c) {return <option key={c.id} value={c.id}>{c.name}</option>;})}
+      </select>}
     </div>);
 
 }
@@ -454,8 +464,17 @@ const DETAIL_SECS = [
 const NAME_W = 184;
 const MONTH_W = 82;
 
-function AllMonthsDetail({ year, allPlans, onCell, onAddRow, onRenameRow, onDeleteRow, onPickMonth }) {
+function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, onDeleteRow, onSetCat, onPickMonth }) {
   const curMonthIdx = year === CURRENT_YEAR ? new Date().getMonth() : -1;
+  // ประเภทปัจจุบันของรายการ (อ่านจากเดือนแรกที่เจอชื่อนี้)
+  function rowCat(section, name) {
+    for (let m = 0; m < 12; m++) {
+      const p = allPlans[year + '-' + m];
+      const it = p && (p[section] || []).find(function (r) {return r.name === name;});
+      if (it) return it.cat || '';
+    }
+    return '';
+  }
 
   function masterRows(section) {
     const order = [],seen = {};
@@ -534,9 +553,12 @@ function AllMonthsDetail({ year, allPlans, onCell, onAddRow, onRenameRow, onDele
                           <td style={Object.assign({}, stickyName, { background: sec.nameBg, padding: '4px 12px', minWidth: NAME_W, width: NAME_W, borderBottom: '1px solid var(--line-soft)' })}>
                             <RowName
                               name={name}
+                              cat={rowCat(sec.key, name)}
+                              cats={(cats && cats[sec.key]) || []}
                               onRename={function (nn) {onRenameRow(sec.key, name, nn);}}
-                              onDelete={function () {onDeleteRow(sec.key, name);}} />
-                            
+                              onDelete={function () {onDeleteRow(sec.key, name);}}
+                              onSetCat={function (c) {onSetCat(sec.key, name, c);}} />
+
                           </td>
                           {MO.map(function (mo, i) {
                             return (
@@ -825,6 +847,19 @@ function PlanMonthly() {
       return next;
     });
   }
+  // เปลี่ยนประเภทของรายการ (ทั้งปี) จากตารางแยกรายการ
+  function detailSetRowCat(section, name, catId) {
+    setAllPlans(function (prev) {
+      const next = Object.assign({}, prev);
+      for (let m = 0; m < 12; m++) {
+        const mkey = year + '-' + m;
+        const p = next[mkey];
+        if (!p || !p[section]) continue;
+        next[mkey] = Object.assign({}, p, { [section]: p[section].map(function (r) {return r.name === name ? Object.assign({}, r, { cat: catId }) : r;}) });
+      }
+      return next;
+    });
+  }
 
   const totIncome = rowSum(plan.income);
   const totSaving = rowSum(plan.saving);
@@ -927,10 +962,12 @@ function PlanMonthly() {
         <AllMonthsDetail
           year={year}
           allPlans={allPlans}
+          cats={planCats}
           onCell={detailSetCell}
           onAddRow={detailAddRow}
           onRenameRow={detailRenameRow}
           onDeleteRow={detailDeleteRow}
+          onSetCat={detailSetRowCat}
           onPickMonth={function (i) {setMonth(i);setMView('month');}} /> :
 
 
@@ -1497,7 +1534,8 @@ function SavingsByYear({ savings, setSavings }) {
   const colTotals = cols.map((c) => months.reduce((s, m) => s + (m.custom && m.custom[c.id] || 0), 0));
 
   const uptoIdx = year < CURRENT_YEAR ? 11 : curMonthIdx < 0 ? 11 : curMonthIdx;
-  const displayBal = bals[uptoIdx];
+  const displayBal = bals[uptoIdx];            // ยอดล่าสุด (ถึงเดือนปัจจุบัน) — ใช้ในการ์ดสรุป
+  const yearEndBal = bals[11];                  // ยอดสิ้นปี (รวมทุกเดือนที่กรอก) — ใช้ในแถว "รวมทั้งปี"
   const reached = target > 0 && displayBal >= target;
 
   const flaggedSaves = months.map(function (_, i) {
@@ -1547,7 +1585,7 @@ function SavingsByYear({ savings, setSavings }) {
       const customVals = cols.map(function (c) {return row.custom && row.custom[c.id] || 0;});
       aoa.push([MO[i], row.save || 0, row.bonus || 0, row.deduct || 0].concat(customVals).concat([bals[i], row.note || '']));
     });
-    aoa.push(['รวมทั้งปี', totSave, totBonus, totDed].concat(colTotals).concat([displayBal, '']));
+    aoa.push(['รวมทั้งปี', totSave, totBonus, totDed].concat(colTotals).concat([yearEndBal, '']));
     const widths = [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 22 }].concat(cols.map(function () {return { wch: 16 };})).concat([{ wch: 16 }, { wch: 26 }]);
     exportXLSX('เงินเก็บ_' + yearLabel(year) + '.xlsx', [{ name: 'เงินเก็บ ' + year, aoa: aoa, cols: widths }]);
   }
@@ -1690,7 +1728,7 @@ function SavingsByYear({ savings, setSavings }) {
                 const cc = c.type === 'out' ? 'var(--coral-deep)' : 'var(--lime-deep)';
                 return <td key={c.id} style={{ padding: '10px 8px', textAlign: 'right', fontSize: 14, color: cc, fontFamily: 'var(--font-head)' }}>{baht(colTotals[ci])}</td>;
               })}
-              <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 15, color: 'var(--ink)', fontFamily: 'var(--font-head)' }}>{baht(displayBal)}</td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 15, color: 'var(--ink)', fontFamily: 'var(--font-head)' }}>{baht(yearEndBal)}</td>
               <td />
             </tr>
           </tfoot>
