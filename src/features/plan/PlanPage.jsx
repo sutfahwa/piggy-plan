@@ -379,7 +379,7 @@ function AllMonthsView({ year, allPlans, onPick, onEdit }) {
 }
 
 /* ─── compact inline-editable number cell for the all-months grid ─── */
-function DCell({ value, onChange, color, bg }) {
+function DCell({ value, onChange, color, bg, selected, onMouseDownCell, onMouseEnterCell }) {
   const [editing, setEditing] = React.useState(false);
   const [raw, setRaw] = React.useState('');
   const start = function () {setRaw(value === 0 ? '' : String(value));setEditing(true);};
@@ -400,12 +400,17 @@ function DCell({ value, onChange, color, bg }) {
 
   }
   return (
-    <span
-      className="tnum" onClick={start} title="คลิกเพื่อกรอก / แก้ไข"
-      style={{ display: 'block', textAlign: 'right', fontSize: 13, padding: '8px 11px', cursor: 'text', color: value === 0 ? 'var(--ink-faint)' : color, whiteSpace: 'nowrap', background: bg }}>
-      
+    <div
+      className="tnum"
+      onMouseDown={onMouseDownCell}
+      onMouseEnter={onMouseEnterCell}
+      onDoubleClick={start}
+      title="คลิกเลือก · ดับเบิลคลิกเพื่อแก้ไข · ลากเลือกหลายช่อง · Ctrl/⌘ C-V คัดลอก/วาง"
+      style={{ display: 'block', textAlign: 'right', fontSize: 13, padding: '8px 11px', cursor: 'cell', color: value === 0 ? 'var(--ink-faint)' : color, whiteSpace: 'nowrap', userSelect: 'none',
+        background: selected ? 'rgba(240,99,95,.18)' : bg,
+        boxShadow: selected ? 'inset 0 0 0 1px var(--accent-deep)' : 'none' }}>
       {value === 0 ? '·' : fmt(value)}
-    </span>);
+    </div>);
 
 }
 
@@ -464,8 +469,11 @@ const DETAIL_SECS = [
 const NAME_W = 184;
 const MONTH_W = 82;
 
-function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, onDeleteRow, onSetCat, onPickMonth }) {
+function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, onDeleteRow, onSetCat, rowOrder, onReorder, onPickMonth }) {
   const curMonthIdx = year === CURRENT_YEAR ? new Date().getMonth() : -1;
+  const [drag, setDrag] = React.useState(null); // { sec, from } ระหว่างลากแถว
+  const [sel, setSel] = React.useState(null);   // { r1,c1,r2,c2 } เลือกช่อง (global row × เดือน)
+  const dragSel = React.useRef(false);
   // ประเภทปัจจุบันของรายการ (อ่านจากเดือนแรกที่เจอชื่อนี้)
   function rowCat(section, name) {
     for (let m = 0; m < 12; m++) {
@@ -484,7 +492,19 @@ function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, 
       if (!p) continue;
       (p[section] || []).forEach(function (it) {if (it.name && !seen[it.name]) {seen[it.name] = 1;order.push(it.name);}});
     }
-    return order;
+    // จัดลำดับตามที่ผู้ใช้ลากไว้ (ชื่อที่บันทึกลำดับก่อน แล้วต่อด้วยรายการใหม่)
+    const saved = (rowOrder && rowOrder[section]) || [];
+    if (!saved.length) return order;
+    return saved.filter(function (n) {return seen[n];}).concat(order.filter(function (n) {return saved.indexOf(n) < 0;}));
+  }
+  // ย้ายแถว from→to ในลำดับปัจจุบัน แล้วบันทึก
+  function moveRow(section, from, to) {
+    const names = masterRows(section);
+    if (from === to || from < 0 || to < 0 || from >= names.length) return;
+    const arr = names.slice();
+    const m = arr.splice(from, 1)[0];
+    arr.splice(to, 0, m);
+    onReorder(section, arr);
   }
   function cellVal(section, name, m) {
     const p = allPlans[year + '-' + m];
@@ -498,11 +518,64 @@ function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, 
   const thBase = { padding: '11px 11px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--line)' };
   const stickyName = { position: 'sticky', left: 0, zIndex: 2 };
 
+  /* ── ช่องที่เลือก (สำหรับ copy/paste เดี่ยว+หลายช่อง) ── */
+  const flatRows = [];
+  DETAIL_SECS.forEach(function (s) {masterRows(s.key).forEach(function (n) {flatRows.push({ sec: s.key, name: n });});});
+  const gidx = {}; flatRows.forEach(function (fr, i) {gidx[fr.sec + '|' + fr.name] = i;});
+  const norm = sel ? { r1: Math.min(sel.r1, sel.r2), r2: Math.max(sel.r1, sel.r2), c1: Math.min(sel.c1, sel.c2), c2: Math.max(sel.c1, sel.c2) } : null;
+  const isSel = function (gr, c) {return norm && gr >= norm.r1 && gr <= norm.r2 && c >= norm.c1 && c <= norm.c2;};
+  const cellDown = function (gr, c, e) {
+    if (e.shiftKey && sel) setSel({ r1: sel.r1, c1: sel.c1, r2: gr, c2: c });
+    else { setSel({ r1: gr, c1: c, r2: gr, c2: c }); dragSel.current = true; }
+  };
+  const cellEnter = function (gr, c) {if (dragSel.current) setSel(function (s) {return s ? { r1: s.r1, c1: s.c1, r2: gr, c2: c } : s;});};
+
+  React.useEffect(function () {
+    const up = function () {dragSel.current = false;};
+    document.addEventListener('mouseup', up);
+    return function () {document.removeEventListener('mouseup', up);};
+  }, []);
+
+  React.useEffect(function () {
+    const inEditable = function () {const a = document.activeElement; return a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);};
+    const parse = function (s) {const n = parseInt(String(s).replace(/[^\d-]/g, ''), 10); return isNaN(n) ? 0 : n;};
+    function onCopy(e) {
+      if (!norm || inEditable()) return;
+      e.preventDefault();
+      const out = [];
+      for (let r = norm.r1; r <= norm.r2; r++) {const fr = flatRows[r]; if (!fr) continue; const line = []; for (let c = norm.c1; c <= norm.c2; c++) line.push(cellVal(fr.sec, fr.name, c)); out.push(line.join('\t'));}
+      e.clipboardData.setData('text/plain', out.join('\n'));
+    }
+    function onPaste(e) {
+      if (!norm || inEditable()) return;
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      if (text == null) return;
+      const grid = text.replace(/\r/g, '').replace(/\n+$/, '').split('\n').map(function (l) {return l.split('\t');});
+      const single = grid.length === 1 && grid[0].length === 1;
+      if (single) {
+        const v = parse(grid[0][0]);
+        for (let r = norm.r1; r <= norm.r2; r++) {const fr = flatRows[r]; if (!fr) continue; for (let c = norm.c1; c <= norm.c2; c++) {if (c >= 0 && c <= 11) onCell(c, fr.sec, fr.name, v);}}
+      } else {
+        for (let i = 0; i < grid.length; i++) {const fr = flatRows[norm.r1 + i]; if (!fr) break; for (let j = 0; j < grid[i].length; j++) {const c = norm.c1 + j; if (c > 11) break; onCell(c, fr.sec, fr.name, parse(grid[i][j]));}}
+      }
+    }
+    function onKey(e) {
+      if (!norm || inEditable()) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {e.preventDefault(); for (let r = norm.r1; r <= norm.r2; r++) {const fr = flatRows[r]; if (!fr) continue; for (let c = norm.c1; c <= norm.c2; c++) onCell(c, fr.sec, fr.name, 0);}}
+      else if (e.key === 'Escape') setSel(null);
+    }
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('paste', onPaste);
+    document.addEventListener('keydown', onKey);
+    return function () {document.removeEventListener('copy', onCopy); document.removeEventListener('paste', onPaste); document.removeEventListener('keydown', onKey);};
+  }, [sel, allPlans]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <React.Fragment>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--ink-faint)', flexWrap: 'wrap' }}>
         <Ic d={ICONS.spark} size={13} />
-        <span>คลิกที่ช่องเพื่อกรอกตัวเลขของแต่ละรายการในแต่ละเดือน · คลิกชื่อรายการเพื่อเปลี่ยนชื่อ · เลื่อนซ้าย-ขวาเพื่อดูครบ 12 เดือน</span>
+        <span>ดับเบิลคลิกช่องเพื่อกรอกตัวเลข · คลิก/ลากเลือกช่อง แล้ว <b>Ctrl/⌘ + C</b> คัดลอก · <b>Ctrl/⌘ + V</b> วาง (เดี่ยวหรือหลายช่อง) · <b>Delete</b> ล้าง · ลากไอคอน ⠿ เพื่อสลับตำแหน่งแถว · เลื่อนซ้าย-ขวาดูครบ 12 เดือน</span>
       </div>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto', borderRadius: 'var(--r-lg)' }}>
@@ -547,23 +620,40 @@ function AllMonthsDetail({ year, allPlans, cats, onCell, onAddRow, onRenameRow, 
                         <td colSpan={13} style={{ background: '#fff' }} />
                       </tr>
                     }
-                    {names.map(function (name) {
+                    {names.map(function (name, ri) {
+                      const dragOver = drag && drag.sec === sec.key && drag.from !== ri;
                       return (
                         <tr key={name} className="dg-row">
-                          <td style={Object.assign({}, stickyName, { background: sec.nameBg, padding: '4px 12px', minWidth: NAME_W, width: NAME_W, borderBottom: '1px solid var(--line-soft)' })}>
-                            <RowName
-                              name={name}
-                              cat={rowCat(sec.key, name)}
-                              cats={(cats && cats[sec.key]) || []}
-                              onRename={function (nn) {onRenameRow(sec.key, name, nn);}}
-                              onDelete={function () {onDeleteRow(sec.key, name);}}
-                              onSetCat={function (c) {onSetCat(sec.key, name, c);}} />
-
+                          <td
+                            onDragOver={function (e) {if (drag && drag.sec === sec.key) e.preventDefault();}}
+                            onDrop={function () {if (drag && drag.sec === sec.key) {moveRow(sec.key, drag.from, ri);} setDrag(null);}}
+                            style={Object.assign({}, stickyName, { background: sec.nameBg, padding: '4px 12px 4px 6px', minWidth: NAME_W, width: NAME_W, borderBottom: '1px solid var(--line-soft)', boxShadow: dragOver ? 'inset 0 2px 0 var(--accent-deep)' : 'none' })}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                              <span
+                                draggable
+                                onDragStart={function () {setDrag({ sec: sec.key, from: ri });}}
+                                onDragEnd={function () {setDrag(null);}}
+                                title="ลากเพื่อสลับตำแหน่งแถว"
+                                style={{ cursor: 'grab', color: 'var(--ink-faint)', fontSize: 13, lineHeight: 1.4, userSelect: 'none', padding: '2px 1px', flexShrink: 0 }}>⠿</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <RowName
+                                  name={name}
+                                  cat={rowCat(sec.key, name)}
+                                  cats={(cats && cats[sec.key]) || []}
+                                  onRename={function (nn) {onRenameRow(sec.key, name, nn);}}
+                                  onDelete={function () {onDeleteRow(sec.key, name);}}
+                                  onSetCat={function (c) {onSetCat(sec.key, name, c);}} />
+                              </div>
+                            </div>
                           </td>
                           {MO.map(function (mo, i) {
+                            const gr = gidx[sec.key + '|' + name];
                             return (
                               <td key={i} style={{ padding: 0, borderBottom: '1px solid var(--line-soft)', borderLeft: '1px solid var(--line-soft)', background: i === curMonthIdx ? 'rgba(240,99,95,.05)' : 'transparent' }}>
                                 <DCell value={cellVal(sec.key, name, i)} color={sec.color}
+                                selected={isSel(gr, i)}
+                                onMouseDownCell={function (e) {cellDown(gr, i, e);}}
+                                onMouseEnterCell={function () {cellEnter(gr, i);}}
                                 onChange={function (v) {onCell(i, sec.key, name, v);}} />
                               </td>);
 
@@ -630,6 +720,8 @@ function PlanMonthly() {
   const [month, setMonth] = React.useState(curMonthIdx);
   const [mView, setMView] = React.useState('month'); // 'month' | 'all'
   const [allMode, setAllMode] = React.useState('detail'); // 'detail' | 'summary'
+  const [rowOrder, setRowOrder] = useStored('plan.roworder.v1', {}); // { sectionKey: [name,...] } ลำดับแถวในตารางแยก
+  const importRef = React.useRef(null);
 
   const planKey = year + '-' + month;
   const isCurrentMonth = year === CURRENT_YEAR && month === curMonthIdx;
@@ -861,6 +953,69 @@ function PlanMonthly() {
     });
   }
 
+  /* ── ดาวน์โหลดเทมเพลตตัวอย่างสำหรับนำเข้า ── */
+  function downloadPlanTemplate() {
+    const header = ['ประเภทหลัก', 'รายการ', 'หมวดหมู่'].concat(MO);
+    const ex = (sec, name, catName, amt) => [sec, name, catName].concat(MO.map(function () {return amt;}));
+    const aoa = [header,
+      ex('รายรับ', 'เงินเดือน', 'เงินเดือน', 45000),
+      ex('เงินออม', 'กองทุนรวม', 'กองทุน', 5000),
+      ex('ค่าใช้จ่ายประจำ', 'ค่าเช่าบ้าน', 'ที่พัก', 9000),
+      ex('ค่าใช้จ่ายแปรผัน', 'ช้อปปิ้ง', 'ช้อปปิ้ง', 2000),
+    ];
+    const widths = [{ wch: 16 }, { wch: 20 }, { wch: 14 }].concat(MO.map(function () {return { wch: 8 };}));
+    // ชีตวิธีใช้ — บอกค่าที่กรอกได้
+    const guide = [['วิธีกรอก'], ['• คอลัมน์ "ประเภทหลัก" ใช้ได้เฉพาะ 4 ค่านี้:'],
+      ...DETAIL_SECS.map(function (s) {return ['   - ' + s.label];}), [''],
+      ['• คอลัมน์ "หมวดหมู่" (ตัวเลือกในแต่ละประเภทหลัก):']];
+    DETAIL_SECS.forEach(function (s) {
+      guide.push(['   ' + s.label + ':', ((planCats[s.key] || []).map(function (c) {return c.name;})).join(', ')]);
+    });
+    guide.push([''], ['• ม.ค.–ธ.ค. = จำนวนเงินของแต่ละเดือน (ว่าง/0 ได้)']);
+    exportXLSX('เทมเพลตนำเข้า_แผนรายเดือน.xlsx', [
+      { name: 'แผนรายเดือน', aoa: aoa, cols: widths },
+      { name: 'วิธีใช้', aoa: guide, cols: [{ wch: 22 }, { wch: 60 }] },
+    ]);
+  }
+
+  /* ── นำเข้าข้อมูลจากไฟล์ Excel (รูปแบบเดียวกับเทมเพลต) → แทนที่ข้อมูลของปีที่เลือก ── */
+  async function importPlanXLSX(file) {
+    if (!file || !window.XLSX) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      const labelToKey = {}; DETAIL_SECS.forEach(function (s) {labelToKey[s.label] = s.key;});
+      const newMonths = {}; for (let m = 0; m < 12; m++) newMonths[year + '-' + m] = { income: [], saving: [], fixedExp: [], varExp: [] };
+      let imported = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i]; if (!r) continue;
+        const secKey = labelToKey[String(r[0] || '').trim()];
+        const name = String(r[1] || '').trim();
+        if (!secKey || !name) continue;
+        const catId = catIdByName(secKey, String(r[2] || '').trim()) || genericCatOf(secKey);
+        for (let m = 0; m < 12; m++) {
+          const amt = parseInt(String(r[3 + m] == null ? '' : r[3 + m]).replace(/[^\d.-]/g, ''), 10) || 0;
+          newMonths[year + '-' + m][secKey].push({ id: makeId(secKey[0]), name: name, amount: amt, cat: catId });
+        }
+        imported++;
+      }
+      if (imported === 0) {
+        if (window.showAlert) await window.showAlert({ type: 'warning', title: 'ไม่พบข้อมูล', message: 'ไม่พบรายการที่นำเข้าได้ — ตรวจรูปแบบไฟล์กับเทมเพลตอีกครั้ง' });
+        return;
+      }
+      const ok = window.showConfirm
+        ? await window.showConfirm({ type: 'warning', title: 'นำเข้าข้อมูล', message: 'จะแทนที่ข้อมูลของ ' + yearLabel(year) + ' ด้วย ' + imported + ' รายการจากไฟล์ ใช่หรือไม่?', confirmText: 'นำเข้า', cancelText: 'ยกเลิก' })
+        : window.confirm('แทนที่ข้อมูลของ ' + yearLabel(year) + ' ใช่หรือไม่?');
+      if (!ok) return;
+      setAllPlans(function (prev) {return Object.assign({}, prev, newMonths);});
+      if (window.showAlert) await window.showAlert({ title: 'นำเข้าสำเร็จ', message: 'นำเข้า ' + imported + ' รายการของ ' + yearLabel(year) + ' เรียบร้อย' });
+    } catch (e) {
+      if (window.showAlert) await window.showAlert({ type: 'warning', title: 'นำเข้าไม่สำเร็จ', message: 'อ่านไฟล์ไม่ได้ ใช้ไฟล์ .xlsx ตามเทมเพลต' });
+    }
+  }
+
   const totIncome = rowSum(plan.income);
   const totSaving = rowSum(plan.saving);
   const totFixed = rowSum(plan.fixedExp);
@@ -987,6 +1142,9 @@ function PlanMonthly() {
           <div style={{ flex: 1 }} />
           <ExportBtn label="Excel: รายการแยก" onClick={exportDetailXLSX} primary={allMode === 'detail'} />
           <ExportBtn label="Excel: สรุปยอดรวม" onClick={exportSummaryXLSX} primary={allMode === 'summary'} />
+          {allMode === 'detail' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 12.5, fontWeight: 600 }} onClick={downloadPlanTemplate}>📄 เทมเพลตตัวอย่าง</button>}
+          {allMode === 'detail' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 12.5, fontWeight: 600 }} onClick={function () {importRef.current && importRef.current.click();}}>⬆️ นำเข้า Excel</button>}
+          <input ref={importRef} type="file" accept=".xlsx,.xls" hidden onChange={function (e) {const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importPlanXLSX(f);}} />
           </div>
           {allMode === 'detail' ?
         <AllMonthsDetail
@@ -998,6 +1156,8 @@ function PlanMonthly() {
           onRenameRow={detailRenameRow}
           onDeleteRow={detailDeleteRow}
           onSetCat={detailSetRowCat}
+          rowOrder={rowOrder}
+          onReorder={function (section, names) {setRowOrder(function (prev) {return Object.assign({}, prev, { [section]: names });});}}
           onPickMonth={function (i) {setMonth(i);setMView('month');}} /> :
 
 
