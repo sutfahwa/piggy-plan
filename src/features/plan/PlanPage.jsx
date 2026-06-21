@@ -871,7 +871,37 @@ function PlanMonthly() {
   const W = (v) => totIncome > 0 ? `${Math.max(0, v / totIncome * 100).toFixed(1)}%` : '0%';
 
   function updSec(key) {
-    return (id, patch) => setPlan({ ...plan, [key]: plan[key].map((r) => r.id === id ? { ...r, ...patch } : r) });
+    return (id, patch) => {
+      const cur = (plan[key] || []).find((r) => r.id === id);
+      const oldName = cur ? cur.name : null;
+      const propName = Object.prototype.hasOwnProperty.call(patch, 'name');
+      const propCat = Object.prototype.hasOwnProperty.call(patch, 'cat');
+      // ชื่อ/ประเภท เป็นคุณสมบัติของ "รายการ" → อัปเดตให้ตรงกันทุกเดือน (ตารางทุกเดือนจับคู่ด้วยชื่อ)
+      // ส่วนจำนวน/ธงเงินออม เป็นของเฉพาะเดือนนั้น
+      if ((propName || propCat) && oldName != null) {
+        setAllPlans((prev) => {
+          const next = Object.assign({}, prev);
+          for (let m = 0; m < 12; m++) {
+            const mk = year + '-' + m;
+            const p = next[mk];
+            if (!p || !p[key]) continue;
+            next[mk] = Object.assign({}, p, { [key]: p[key].map((r) => {
+              if (mk === planKey && r.id === id) return Object.assign({}, r, patch);   // เดือนปัจจุบัน: ใส่ทั้ง patch
+              if (r.name === oldName) {                                                // เดือนอื่น: เฉพาะ ชื่อ/ประเภท
+                const np = {};
+                if (propName) np.name = patch.name;
+                if (propCat) np.cat = patch.cat;
+                return Object.assign({}, r, np);
+              }
+              return r;
+            }) });
+          }
+          return next;
+        });
+        return;
+      }
+      setPlan({ ...plan, [key]: plan[key].map((r) => r.id === id ? { ...r, ...patch } : r) });
+    };
   }
   function delSec(key) {
     return (id) => setPlan({ ...plan, [key]: plan[key].filter((r) => r.id !== id) });
