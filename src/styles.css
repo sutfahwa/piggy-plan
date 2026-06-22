@@ -656,8 +656,9 @@ select.input { appearance: none; cursor: pointer; }
 .welcome-blob.b2 { width: 380px; height: 380px; background: radial-gradient(circle at 30% 30%, #CDEAB4, transparent 70%); bottom: -140px; left: -90px; }
 .welcome-blob.b3 { width: 300px; height: 300px; background: radial-gradient(circle at 30% 30%, #F3F0BE, transparent 70%); bottom: 40px; right: 8%; opacity: .4; }
 
-.welcome-top, .welcome-body, .welcome-foot { position: relative; z-index: 1; }
-.welcome-top { display: flex; align-items: center; }
+.welcome-body, .welcome-foot { position: relative; z-index: 1; }
+/* header above the body so the profile dropdown isn't covered by the hero title */
+.welcome-top { position: relative; z-index: 20; display: flex; align-items: center; }
 .welcome-hello { display: flex; align-items: center; gap: 11px; background: var(--surface); padding: 7px 16px 7px 8px; border-radius: 999px; box-shadow: var(--shadow-sm); font-weight: 500; font-size: 14px; }
 
 .welcome-body {
